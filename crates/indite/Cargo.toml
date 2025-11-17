@@ -1,0 +1,11 @@
+[package]
+name = "indite"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ash.workspace = true
+anyhow.workspace = true
+openxr.workspace = true
+wgpu.workspace = true
+wgpu-hal.workspace = true

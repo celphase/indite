@@ -1,0 +1,12 @@
+[package]
+name = "example"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bytemuck.workspace = true
+ctrlc.workspace = true
+glam = { workspace = true, features = ["bytemuck"] }
+openxr = { workspace = true, features = ["linked"] }
+wgpu.workspace = true
+indite.workspace = true

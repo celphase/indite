@@ -1,3 +1,6 @@
+mod actions;
+mod math;
+
 use std::{
     borrow::Cow,
     num::NonZero,
@@ -8,7 +11,7 @@ use std::{
     time::Duration,
 };
 
-use glam::{Affine3A, Mat4, Quat, Vec3};
+use glam::Mat4;
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindGroupLayoutDescriptor,
@@ -194,81 +197,34 @@ fn run_session(
     // A session represents this application's desire to display things! This is where we hook
     // up our graphics API. This does not start the session; for that, you'll need a call to
     // Session::begin, which we do in 'main_loop below.
-    let (session, mut frame_wait, mut frame_stream) =
+    let (xr_session, mut frame_wait, mut frame_stream) =
         indite::create_session(xr_instance, xr_system, instance, device);
 
     // Find all the viewpoints for the view type we're using.
-    let xr_views = xr_instance
+    let xr_view_configs = xr_instance
         .enumerate_view_configuration_views(xr_system, VIEW_TYPE)
         .unwrap();
-    assert_eq!(xr_views.len(), VIEW_COUNT as usize);
+    assert_eq!(xr_view_configs.len(), VIEW_COUNT as usize);
 
     // We're using plain multiview rendering right now, no foviated features, so the views should be
     // equal.
-    assert_eq!(xr_views[0], xr_views[1]);
+    assert_eq!(xr_view_configs[0], xr_view_configs[1]);
 
     // Create the swapchain for the session
     let swapchain_desc = indite::SwapchainDescriptor {
-        width: xr_views[0].recommended_image_rect_width,
-        height: xr_views[0].recommended_image_rect_height,
+        width: xr_view_configs[0].recommended_image_rect_width,
+        height: xr_view_configs[0].recommended_image_rect_height,
         view_count: VIEW_COUNT,
     };
-    let (xr_swapchain, swapchain_textures) =
-        indite::create_swapchain(device, &session, &swapchain_desc);
+    let (xr_swapchain_handle, swapchain_textures) =
+        indite::create_swapchain(device, &xr_session, &swapchain_desc);
 
-    // Create an action set to encapsulate our actions
-    let action_set = xr_instance
-        .create_action_set("input", "input pose information", 0)
-        .unwrap();
-
-    let right_action = action_set
-        .create_action::<openxr::Posef>("right_hand", "Right Hand Controller", &[])
-        .unwrap();
-    let left_action = action_set
-        .create_action::<openxr::Posef>("left_hand", "Left Hand Controller", &[])
-        .unwrap();
-
-    // Bind our actions to input devices using the given profile
-    // If you want to access inputs specific to a particular device you may specify a different
-    // interaction profile
-    let bindings = [
-        openxr::Binding::new(
-            &right_action,
-            xr_instance
-                .string_to_path("/user/hand/right/input/grip/pose")
-                .unwrap(),
-        ),
-        openxr::Binding::new(
-            &left_action,
-            xr_instance
-                .string_to_path("/user/hand/left/input/grip/pose")
-                .unwrap(),
-        ),
-    ];
-    xr_instance
-        .suggest_interaction_profile_bindings(
-            xr_instance
-                .string_to_path("/interaction_profiles/khr/simple_controller")
-                .unwrap(),
-            &bindings,
-        )
-        .unwrap();
-
-    // Attach the action set to the session
-    session.attach_action_sets(&[&action_set]).unwrap();
-
-    // Create an action space for each device we want to locate
-    let right_space = right_action
-        .create_space(session.clone(), openxr::Path::NULL, openxr::Posef::IDENTITY)
-        .unwrap();
-    let left_space = left_action
-        .create_space(session.clone(), openxr::Path::NULL, openxr::Posef::IDENTITY)
-        .unwrap();
+    let action_set_bundle = actions::create_action_set(xr_instance, &xr_session);
 
     // OpenXR uses a couple different types of reference frames for positioning content; we need
     // to choose one for displaying our content! STAGE would be relative to the center of your
     // guardian system's bounds, and LOCAL would be relative to your device's starting location.
-    let stage = session
+    let xr_stage = xr_session
         .create_reference_space(openxr::ReferenceSpaceType::STAGE, openxr::Posef::IDENTITY)
         .unwrap();
 
@@ -284,7 +240,7 @@ fn run_session(
             // The OpenXR runtime may want to perform a smooth transition between scenes, so we
             // can't necessarily exit instantly. Instead, we must notify the runtime of our
             // intent and wait for it to tell us when we're actually done.
-            match session.request_exit() {
+            match xr_session.request_exit() {
                 Ok(()) => {}
                 Err(openxr::sys::Result::ERROR_SESSION_NOT_RUNNING) => break,
                 Err(e) => panic!("{}", e),
@@ -300,11 +256,11 @@ fn run_session(
                     println!("entered state {:?}", e.state());
                     match e.state() {
                         openxr::SessionState::READY => {
-                            session.begin(VIEW_TYPE).unwrap();
+                            xr_session.begin(VIEW_TYPE).unwrap();
                             session_running = true;
                         }
                         openxr::SessionState::STOPPING => {
-                            session.end().unwrap();
+                            xr_session.end().unwrap();
                             session_running = false;
                         }
                         openxr::SessionState::EXITING | openxr::SessionState::LOSS_PENDING => {
@@ -350,7 +306,7 @@ fn run_session(
 
         // We need to ask which swapchain image to use for rendering! Which one will we get?
         // Who knows! It's up to the runtime to decide.
-        let image_index = xr_swapchain.lock().unwrap().acquire_image().unwrap();
+        let image_index = xr_swapchain_handle.lock().unwrap().acquire_image().unwrap();
 
         // Get the view for this frame
         let (_, view) = &swapchain_textures[image_index as usize];
@@ -359,82 +315,41 @@ fn run_session(
         // TODO: See comment below
         //let command_buffer = record_command_buffer(device, &render_pipeline, &view);
 
-        read_actions(
-            &session,
-            &action_set,
-            &right_action,
-            &left_action,
-            &right_space,
-            &left_space,
-            &stage,
-            &xr_frame_state,
-        );
+        actions::read_actions(&xr_session, &action_set_bundle, &xr_stage, &xr_frame_state);
 
         // Fetch the view transforms. To minimize latency, we intentionally do this *after*
         // recording commands to render the scene, i.e. at the last possible moment before
         // rendering begins in earnest on the GPU. Uniforms dependent on this data can be sent
         // to the GPU just-in-time by writing them to per-frame host-visible memory which the
         // GPU will only read once the command buffer is submitted.
-        let (_, views) = session
-            .locate_views(VIEW_TYPE, xr_frame_state.predicted_display_time, &stage)
+        let (_, xr_views) = xr_session
+            .locate_views(VIEW_TYPE, xr_frame_state.predicted_display_time, &xr_stage)
             .unwrap();
 
         // TODO: Temporarily, rendering is moved after getting views, because we need to figure out
         // how to late-update the buffers.
-        let uniform_bind_group = create_uniform_bind_group(device, uniform_layout, &views);
+        let uniform_bind_group = create_uniform_bind_group(device, uniform_layout, &xr_views);
         let command_buffer =
             record_command_buffer(device, render_pipeline, view, &uniform_bind_group);
 
         // Wait until the image is available to render to before beginning work on the GPU. The
         // compositor could still be reading from it.
-        let mut xr_swapchain_locked = xr_swapchain.lock().unwrap();
-        xr_swapchain_locked
-            .wait_image(openxr::Duration::INFINITE)
-            .unwrap();
+        let mut xr_swapchain = xr_swapchain_handle.lock().unwrap();
+        xr_swapchain.wait_image(openxr::Duration::INFINITE).unwrap();
 
         // Submit the previously prepared command buffer
         queue.submit(Some(command_buffer));
 
-        xr_swapchain_locked.release_image().unwrap();
-
-        // Tell OpenXR what to present for this frame
-        let rect = openxr::Rect2Di {
-            offset: openxr::Offset2Di { x: 0, y: 0 },
-            extent: openxr::Extent2Di {
-                width: xr_views[0].recommended_image_rect_width as _,
-                height: xr_views[1].recommended_image_rect_height as _,
-            },
-        };
-        let views = [
-            openxr::CompositionLayerProjectionView::new()
-                .pose(views[0].pose)
-                .fov(views[0].fov)
-                .sub_image(
-                    openxr::SwapchainSubImage::new()
-                        .swapchain(&xr_swapchain_locked)
-                        .image_array_index(0)
-                        .image_rect(rect),
-                ),
-            openxr::CompositionLayerProjectionView::new()
-                .pose(views[1].pose)
-                .fov(views[1].fov)
-                .sub_image(
-                    openxr::SwapchainSubImage::new()
-                        .swapchain(&xr_swapchain_locked)
-                        .image_array_index(1)
-                        .image_rect(rect),
-                ),
-        ];
-        let layer = openxr::CompositionLayerProjection::new()
-            .space(&stage)
-            .views(&views);
-        frame_stream
-            .end(
-                xr_frame_state.predicted_display_time,
-                environment_blend_mode,
-                &[&layer],
-            )
-            .unwrap();
+        xr_swapchain.release_image().unwrap();
+        end_frame(
+            environment_blend_mode,
+            &mut frame_stream,
+            &swapchain_desc,
+            &xr_swapchain,
+            &xr_stage,
+            &xr_views,
+            &xr_frame_state,
+        );
     }
 
     // Clean up anything WGPU that references OpenXR managed resources
@@ -453,15 +368,12 @@ fn run_session(
     // Since everything gets cleaned up automatically anyways that's not a big issue right now.
     println!("cleaning openxr session");
     drop((
-        session,
+        xr_session,
         frame_wait,
         frame_stream,
-        stage,
-        action_set,
-        left_space,
-        right_space,
-        left_action,
-        right_action,
+        xr_swapchain_handle,
+        xr_stage,
+        action_set_bundle,
     ));
 }
 
@@ -497,53 +409,6 @@ fn record_command_buffer(
     encoder.finish()
 }
 
-#[allow(clippy::too_many_arguments)]
-fn read_actions(
-    session: &openxr::Session<openxr::Vulkan>,
-    action_set: &openxr::ActionSet,
-    right_action: &openxr::Action<openxr::Posef>,
-    left_action: &openxr::Action<openxr::Posef>,
-    right_space: &openxr::Space,
-    left_space: &openxr::Space,
-    stage: &openxr::Space,
-    xr_frame_state: &openxr::FrameState,
-) {
-    session.sync_actions(&[action_set.into()]).unwrap();
-
-    // Find where our controllers are located in the Stage space
-    let right_location = right_space
-        .locate(stage, xr_frame_state.predicted_display_time)
-        .unwrap();
-
-    let left_location = left_space
-        .locate(stage, xr_frame_state.predicted_display_time)
-        .unwrap();
-
-    let mut printed = false;
-    if left_action.is_active(session, openxr::Path::NULL).unwrap() {
-        print!(
-            "left Hand: ({:0<12},{:0<12},{:0<12}), ",
-            left_location.pose.position.x,
-            left_location.pose.position.y,
-            left_location.pose.position.z
-        );
-        printed = true;
-    }
-
-    if right_action.is_active(session, openxr::Path::NULL).unwrap() {
-        print!(
-            "right Hand: ({:0<12},{:0<12},{:0<12})",
-            right_location.pose.position.x,
-            right_location.pose.position.y,
-            right_location.pose.position.z
-        );
-        printed = true;
-    }
-    if printed {
-        println!();
-    }
-}
-
 fn create_uniform_layout(device: &Device) -> BindGroupLayout {
     let size = std::mem::size_of::<Mat4>() * 2;
     let transforms = BindGroupLayoutEntry {
@@ -568,18 +433,8 @@ fn create_uniform_bind_group(
     layout: &BindGroupLayout,
     views: &[openxr::View],
 ) -> BindGroup {
-    let transform_0 = {
-        let (translation, rotation) = openxr_pose_to_glam(&views[0].pose);
-        let view = Affine3A::from_rotation_translation(rotation, translation).inverse();
-        let proj = openxr_proj_to_glam(&views[0]);
-        proj * view
-    };
-    let transform_1 = {
-        let (translation, rotation) = openxr_pose_to_glam(&views[1].pose);
-        let view = Affine3A::from_rotation_translation(rotation, translation).inverse();
-        let proj = openxr_proj_to_glam(&views[1]);
-        proj * view
-    };
+    let transform_0 = math::matrix_from_view(&views[0]);
+    let transform_1 = math::matrix_from_view(&views[1]);
     let transforms = [transform_0, transform_1];
 
     let desc = BufferInitDescriptor {
@@ -602,60 +457,51 @@ fn create_uniform_bind_group(
     device.create_bind_group(&desc)
 }
 
-fn openxr_pose_to_glam(pose: &openxr::Posef) -> (Vec3, Quat) {
-    let rotation = {
-        let mut quat = Quat::from_xyzw(
-            pose.orientation.x,
-            pose.orientation.y,
-            pose.orientation.z,
-            pose.orientation.w,
-        );
-
-        if quat.length() == 0.0 {
-            quat = Quat::IDENTITY;
-        }
-
-        if !quat.is_normalized() {
-            quat = quat.normalize();
-        }
-
-        quat
+fn end_frame(
+    environment_blend_mode: openxr::EnvironmentBlendMode,
+    frame_stream: &mut openxr::FrameStream<openxr::Vulkan>,
+    swapchain_desc: &indite::SwapchainDescriptor,
+    xr_swapchain: &openxr::Swapchain<openxr::Vulkan>,
+    xr_stage: &openxr::Space,
+    xr_views: &[openxr::View],
+    xr_frame_state: &openxr::FrameState,
+) {
+    // Tell OpenXR what to present for this frame
+    let rect = openxr::Rect2Di {
+        offset: openxr::Offset2Di { x: 0, y: 0 },
+        extent: openxr::Extent2Di {
+            width: swapchain_desc.width as _,
+            height: swapchain_desc.height as _,
+        },
     };
-
-    let translation = glam::vec3(pose.position.x, pose.position.y, pose.position.z);
-
-    (translation, rotation)
-}
-
-fn openxr_proj_to_glam(view: &openxr::View) -> Mat4 {
-    // TODO: frustum_rh?
-    let z_near = 0.1;
-    let z_far = 100.0;
-
-    let [tan_left, tan_right, tan_down, tan_up] = [
-        view.fov.angle_left,
-        view.fov.angle_right,
-        view.fov.angle_down,
-        view.fov.angle_up,
-    ]
-    .map(f32::tan);
-
-    let tan_width = tan_right - tan_left;
-    let tan_height = tan_up - tan_down;
-
-    let a11 = 2.0 / tan_width;
-    let a22 = 2.0 / tan_height;
-
-    let a31 = (tan_right + tan_left) / tan_width;
-    let a32 = (tan_up + tan_down) / tan_height;
-    let a33 = -z_far / (z_far - z_near);
-
-    let a43 = -(z_far * z_near) / (z_far - z_near);
-
-    glam::Mat4::from_cols_array(&[
-        a11, 0.0, 0.0, 0.0, //
-        0.0, a22, 0.0, 0.0, //
-        a31, a32, a33, -1.0, //
-        0.0, 0.0, a43, 0.0, //
-    ])
+    let views = [
+        openxr::CompositionLayerProjectionView::new()
+            .pose(xr_views[0].pose)
+            .fov(xr_views[0].fov)
+            .sub_image(
+                openxr::SwapchainSubImage::new()
+                    .swapchain(xr_swapchain)
+                    .image_array_index(0)
+                    .image_rect(rect),
+            ),
+        openxr::CompositionLayerProjectionView::new()
+            .pose(xr_views[1].pose)
+            .fov(xr_views[1].fov)
+            .sub_image(
+                openxr::SwapchainSubImage::new()
+                    .swapchain(xr_swapchain)
+                    .image_array_index(1)
+                    .image_rect(rect),
+            ),
+    ];
+    let layer = openxr::CompositionLayerProjection::new()
+        .space(xr_stage)
+        .views(&views);
+    frame_stream
+        .end(
+            xr_frame_state.predicted_display_time,
+            environment_blend_mode,
+            &[&layer],
+        )
+        .unwrap();
 }

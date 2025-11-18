@@ -13,19 +13,17 @@ pub struct SwapchainDescriptor {
     pub view_count: u32,
 }
 
+pub type SwapchainHandle = Arc<Mutex<openxr::Swapchain<openxr::Vulkan>>>;
+
 /// Creates a swapchain for the OpenXR session.
 ///
 /// The swapchain itself is returned with a mutex guard, because the WGPU textures that reference it
 /// need to keep it alive.
-#[allow(clippy::type_complexity)]
 pub fn create_swapchain(
     device: &Device,
     xr_session: &openxr::Session<openxr::Vulkan>,
     desc: &SwapchainDescriptor,
-) -> (
-    Arc<Mutex<openxr::Swapchain<openxr::Vulkan>>>,
-    Vec<(Texture, TextureView)>,
-) {
+) -> (SwapchainHandle, Vec<(Texture, TextureView)>) {
     // Create a swapchain for the viewpoints! A swapchain is a set of texture buffers
     // used for displaying to screen, typically this is a backbuffer and a front buffer,
     // one for rendering data to, and one for displaying on-screen.
@@ -79,7 +77,7 @@ unsafe fn create_swapchain_texture(
     color_image: u64,
     device: &Device,
     resolution: vk::Extent2D,
-    xr_swapchain: Arc<Mutex<openxr::Swapchain<openxr::Vulkan>>>,
+    xr_swapchain: SwapchainHandle,
 ) -> Texture {
     let color_image = vk::Image::from_raw(color_image);
 

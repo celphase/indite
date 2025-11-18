@@ -9,7 +9,7 @@ use wgpu_hal::api::Vulkan;
 pub use self::{
     context::{create_device, create_instance},
     debug_utils::DebugUtils,
-    swapchain::{SwapchainDescriptor, create_swapchain},
+    swapchain::{SwapchainDescriptor, SwapchainHandle, create_swapchain},
 };
 
 pub fn create_session(

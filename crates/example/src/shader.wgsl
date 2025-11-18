@@ -1,5 +1,5 @@
 struct UniformData {
-    transforms: array<mat4x4<f32>, 2>,
+    matrices: array<mat4x4<f32>, 2>,
 }
 
 @group(0)
@@ -11,7 +11,7 @@ fn vs_main(@builtin(vertex_index) in_vertex_index: u32, @builtin(view_index) vie
     let x = f32(i32(in_vertex_index) - 1);
     let y = f32(i32(in_vertex_index & 1u) * 2 - 1);
     let position = vec4<f32>(x, y, 0.0, 1.0);
-    let matrix = u_data.transforms[view_index];
+    let matrix = u_data.matrices[view_index];
     return matrix * position;
 }
 

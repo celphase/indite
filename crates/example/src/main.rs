@@ -14,11 +14,10 @@ use std::{
 use glam::Mat4;
 use indite::SwapchainHandle;
 use wgpu::{
-    util::{BufferInitDescriptor, DeviceExt},
     BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindGroupLayoutDescriptor,
-    BindGroupLayoutEntry, BindingType, BufferBindingType, BufferSize, BufferUsages, Color,
-    CommandBuffer, CommandEncoderDescriptor, Device, FragmentState, Instance, LoadOp,
-    MultisampleState, Operations, PipelineLayoutDescriptor, PrimitiveState, Queue,
+    BindGroupLayoutEntry, BindingType, Buffer, BufferBindingType, BufferDescriptor, BufferSize,
+    BufferUsages, Color, CommandBuffer, CommandEncoderDescriptor, Device, FragmentState, Instance,
+    LoadOp, MultisampleState, Operations, PipelineLayoutDescriptor, PrimitiveState, Queue,
     RenderPassColorAttachment, RenderPassDescriptor, RenderPipeline, RenderPipelineDescriptor,
     ShaderModuleDescriptor, ShaderSource, ShaderStages, StoreOp, Texture, TextureFormat,
     TextureView, VertexState,
@@ -389,8 +388,8 @@ fn render_frame(
     let (_, view) = &swapchain_textures[image_index as usize];
 
     // Record the command buffer
-    // TODO: See comment below
-    //let command_buffer = record_command_buffer(device, &render_pipeline, &view);
+    let (uniform_buffer, uniform_bind_group) = create_uniform_bind_group(device, uniform_layout);
+    let command_buffer = record_command_buffer(device, render_pipeline, view, &uniform_bind_group);
 
     actions::read_actions(xr_session, action_set_bundle, xr_stage, &xr_frame_state);
 
@@ -403,10 +402,8 @@ fn render_frame(
         .locate_views(VIEW_TYPE, xr_frame_state.predicted_display_time, xr_stage)
         .unwrap();
 
-    // TODO: Temporarily, rendering is moved after getting views, because we need to figure out
-    // how to late-update the buffers.
-    let uniform_bind_group = create_uniform_bind_group(device, uniform_layout, &xr_views);
-    let command_buffer = record_command_buffer(device, render_pipeline, view, &uniform_bind_group);
+    // Update bind group buffer with the eyes' matrices, as late as possible
+    write_uniform_buffer(&uniform_buffer, &xr_views);
 
     // Wait until the image is available to render to before beginning work on the GPU. The
     // compositor could still be reading from it.
@@ -479,21 +476,14 @@ fn create_uniform_layout(device: &Device) -> BindGroupLayout {
     device.create_bind_group_layout(&desc)
 }
 
-fn create_uniform_bind_group(
-    device: &Device,
-    layout: &BindGroupLayout,
-    views: &[openxr::View],
-) -> BindGroup {
-    let transform_0 = math::matrix_from_view(&views[0]);
-    let transform_1 = math::matrix_from_view(&views[1]);
-    let transforms = [transform_0, transform_1];
-
-    let desc = BufferInitDescriptor {
+fn create_uniform_bind_group(device: &Device, layout: &BindGroupLayout) -> (Buffer, BindGroup) {
+    let desc = BufferDescriptor {
         label: Some("uniform-buffer"),
-        contents: bytemuck::bytes_of(&transforms),
+        size: (std::mem::size_of::<Mat4>() * 2) as u64,
         usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        mapped_at_creation: true,
     };
-    let buffer = device.create_buffer_init(&desc);
+    let buffer = device.create_buffer(&desc);
 
     let entry = BindGroupEntry {
         binding: 0,
@@ -505,7 +495,21 @@ fn create_uniform_bind_group(
         layout,
         entries: &[entry],
     };
-    device.create_bind_group(&desc)
+    let bind_group = device.create_bind_group(&desc);
+
+    (buffer, bind_group)
+}
+
+fn write_uniform_buffer(buffer: &Buffer, xr_views: &[openxr::View]) {
+    let transform_0 = math::matrix_from_view(&xr_views[0]);
+    let transform_1 = math::matrix_from_view(&xr_views[1]);
+    let transforms = [transform_0, transform_1];
+
+    let contents = bytemuck::bytes_of(&transforms);
+    let size = contents.len();
+
+    buffer.slice(..).get_mapped_range_mut()[..size].copy_from_slice(contents);
+    buffer.unmap();
 }
 
 fn end_frame(

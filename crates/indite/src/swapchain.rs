@@ -47,19 +47,29 @@ pub fn create_swapchain(
         mip_count: 1,
     };
     let xr_swapchain = xr_session.create_swapchain(&swapchain_info).unwrap();
-    let xr_swapchain = Arc::new(Mutex::new(xr_swapchain));
+    let xr_swapchain_handle = Arc::new(Mutex::new(xr_swapchain));
 
-    let swapchain_images = xr_swapchain.lock().unwrap().enumerate_images().unwrap();
+    let swapchain_textures = create_swapchain_textures(device, desc, &xr_swapchain_handle);
+
+    (xr_swapchain_handle, swapchain_textures)
+}
+
+fn create_swapchain_textures(
+    device: &Device,
+    desc: &SwapchainDescriptor,
+    xr_swapchain_handle: &SwapchainHandle,
+) -> Vec<(Texture, TextureView)> {
+    let swapchain_images = xr_swapchain_handle
+        .lock()
+        .unwrap()
+        .enumerate_images()
+        .unwrap();
+
     let swapchain_textures: Vec<_> = swapchain_images
         .into_iter()
         .map(|color_image| {
             let texture = unsafe {
-                create_swapchain_texture(
-                    color_image,
-                    device,
-                    swapchain_resolution,
-                    xr_swapchain.clone(),
-                )
+                create_swapchain_texture(device, desc, xr_swapchain_handle.clone(), color_image)
             };
             let view = texture.create_view(&TextureViewDescriptor {
                 dimension: Some(TextureViewDimension::D2Array),
@@ -70,24 +80,28 @@ pub fn create_swapchain(
         })
         .collect();
 
-    (xr_swapchain, swapchain_textures)
+    swapchain_textures
 }
 
+/// # Safety
+/// - `color_image` must be valid for the information in `desc`.
+/// - `color_image` lifetime is not managed by the returned `Texture`.
+/// - `color_image` must be valid for as long as `xr_swapchain` is valid.
 unsafe fn create_swapchain_texture(
-    color_image: u64,
     device: &Device,
-    resolution: vk::Extent2D,
+    desc: &SwapchainDescriptor,
     xr_swapchain: SwapchainHandle,
+    color_image: u64,
 ) -> Texture {
     let color_image = vk::Image::from_raw(color_image);
 
     let hal_device = unsafe { device.as_hal::<Vulkan>().unwrap() };
 
     let hal_texture_desc = wgpu_hal::TextureDescriptor {
-        label: Some("openxr swapchain"),
+        label: Some("openxr swapchain texture"),
         size: Extent3d {
-            width: resolution.width,
-            height: resolution.height,
+            width: desc.width,
+            height: desc.height,
             depth_or_array_layers: 2,
         },
         mip_level_count: 1,
@@ -116,10 +130,10 @@ unsafe fn create_swapchain_texture(
     };
 
     let texture_desc = TextureDescriptor {
-        label: Some("openxr swapchain"),
+        label: Some("openxr swapchain texture"),
         size: Extent3d {
-            width: resolution.width,
-            height: resolution.height,
+            width: desc.width,
+            height: desc.height,
             depth_or_array_layers: 2,
         },
         mip_level_count: 1,

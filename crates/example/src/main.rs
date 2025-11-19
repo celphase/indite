@@ -12,6 +12,7 @@ use std::{
 };
 
 use glam::Mat4;
+use indite::SwapchainHandle;
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindGroupLayoutDescriptor,
@@ -19,9 +20,11 @@ use wgpu::{
     CommandBuffer, CommandEncoderDescriptor, Device, FragmentState, Instance, LoadOp,
     MultisampleState, Operations, PipelineLayoutDescriptor, PrimitiveState, Queue,
     RenderPassColorAttachment, RenderPassDescriptor, RenderPipeline, RenderPipelineDescriptor,
-    ShaderModuleDescriptor, ShaderSource, ShaderStages, StoreOp, TextureFormat, TextureView,
-    VertexState,
+    ShaderModuleDescriptor, ShaderSource, ShaderStages, StoreOp, Texture, TextureFormat,
+    TextureView, VertexState,
 };
+
+use crate::actions::ActionSetBundle;
 
 const VIEW_TYPE: openxr::ViewConfigurationType = openxr::ViewConfigurationType::PRIMARY_STEREO;
 
@@ -233,50 +236,19 @@ fn run_session(
     let mut session_running = false;
 
     'main_loop: loop {
-        // Check for ctrl-c
-        if ctrlc_request_exit.load(Ordering::Relaxed) {
-            println!("ctrl-c requesting exit");
-
-            // The OpenXR runtime may want to perform a smooth transition between scenes, so we
-            // can't necessarily exit instantly. Instead, we must notify the runtime of our
-            // intent and wait for it to tell us when we're actually done.
-            match xr_session.request_exit() {
-                Ok(()) => {}
-                Err(openxr::sys::Result::ERROR_SESSION_NOT_RUNNING) => break,
-                Err(e) => panic!("{}", e),
-            }
+        let should_continue = handle_ctrlc(&ctrlc_request_exit, &xr_session);
+        if !should_continue {
+            break 'main_loop;
         }
 
-        while let Some(event) = xr_instance.poll_event(&mut event_storage).unwrap() {
-            use openxr::Event::*;
-            match event {
-                SessionStateChanged(e) => {
-                    // Session state change is where we can begin and end sessions, as well as
-                    // find quit messages!
-                    println!("entered state {:?}", e.state());
-                    match e.state() {
-                        openxr::SessionState::READY => {
-                            xr_session.begin(VIEW_TYPE).unwrap();
-                            session_running = true;
-                        }
-                        openxr::SessionState::STOPPING => {
-                            xr_session.end().unwrap();
-                            session_running = false;
-                        }
-                        openxr::SessionState::EXITING | openxr::SessionState::LOSS_PENDING => {
-                            break 'main_loop;
-                        }
-                        _ => {}
-                    }
-                }
-                InstanceLossPending(_) => {
-                    break 'main_loop;
-                }
-                EventsLost(e) => {
-                    println!("lost {} events", e.lost_event_count());
-                }
-                _ => {}
-            }
+        let should_continue = handle_instance_events(
+            xr_instance,
+            &xr_session,
+            &mut event_storage,
+            &mut session_running,
+        );
+        if !should_continue {
+            break 'main_loop;
         }
 
         if !session_running {
@@ -285,70 +257,20 @@ fn run_session(
             continue;
         }
 
-        // Block until the previous frame is finished displaying, and is ready for another one.
-        // Also returns a prediction of when the next frame will be displayed, for use with
-        // predicting locations of controllers, viewpoints, etc.
-        let xr_frame_state = frame_wait.wait().unwrap();
-
-        // Must be called before any rendering is done!
-        frame_stream.begin().unwrap();
-
-        if !xr_frame_state.should_render {
-            frame_stream
-                .end(
-                    xr_frame_state.predicted_display_time,
-                    environment_blend_mode,
-                    &[],
-                )
-                .unwrap();
-            continue;
-        }
-
-        // We need to ask which swapchain image to use for rendering! Which one will we get?
-        // Who knows! It's up to the runtime to decide.
-        let image_index = xr_swapchain_handle.lock().unwrap().acquire_image().unwrap();
-
-        // Get the view for this frame
-        let (_, view) = &swapchain_textures[image_index as usize];
-
-        // Record the command buffer
-        // TODO: See comment below
-        //let command_buffer = record_command_buffer(device, &render_pipeline, &view);
-
-        actions::read_actions(&xr_session, &action_set_bundle, &xr_stage, &xr_frame_state);
-
-        // Fetch the view transforms. To minimize latency, we intentionally do this *after*
-        // recording commands to render the scene, i.e. at the last possible moment before
-        // rendering begins in earnest on the GPU. Uniforms dependent on this data can be sent
-        // to the GPU just-in-time by writing them to per-frame host-visible memory which the
-        // GPU will only read once the command buffer is submitted.
-        let (_, xr_views) = xr_session
-            .locate_views(VIEW_TYPE, xr_frame_state.predicted_display_time, &xr_stage)
-            .unwrap();
-
-        // TODO: Temporarily, rendering is moved after getting views, because we need to figure out
-        // how to late-update the buffers.
-        let uniform_bind_group = create_uniform_bind_group(device, uniform_layout, &xr_views);
-        let command_buffer =
-            record_command_buffer(device, render_pipeline, view, &uniform_bind_group);
-
-        // Wait until the image is available to render to before beginning work on the GPU. The
-        // compositor could still be reading from it.
-        let mut xr_swapchain = xr_swapchain_handle.lock().unwrap();
-        xr_swapchain.wait_image(openxr::Duration::INFINITE).unwrap();
-
-        // Submit the previously prepared command buffer
-        queue.submit(Some(command_buffer));
-
-        xr_swapchain.release_image().unwrap();
-        end_frame(
+        render_frame(
             environment_blend_mode,
+            device,
+            queue,
+            uniform_layout,
+            render_pipeline,
+            &xr_session,
+            &mut frame_wait,
             &mut frame_stream,
             &swapchain_desc,
-            &xr_swapchain,
+            &xr_swapchain_handle,
+            &swapchain_textures,
+            &action_set_bundle,
             &xr_stage,
-            &xr_views,
-            &xr_frame_state,
         );
     }
 
@@ -360,21 +282,150 @@ fn run_session(
 
     // Wait until WGPU is done processing everything, so we can start cleaning resources
     instance.poll_all(true);
+}
 
-    // OpenXR MUST be allowed to clean up before we destroy WGPU resources it could touch.
-    // We're at the end of the function so this should happen automatically, but let's do it just in
-    // case.
-    // TODO: This is missing some values that have important drop handlers.
-    // Since everything gets cleaned up automatically anyways that's not a big issue right now.
-    println!("cleaning openxr session");
-    drop((
-        xr_session,
-        frame_wait,
+fn handle_ctrlc(
+    ctrlc_request_exit: &Arc<AtomicBool>,
+    xr_session: &openxr::Session<openxr::Vulkan>,
+) -> bool {
+    // Check for ctrl-c
+    if ctrlc_request_exit.load(Ordering::Relaxed) {
+        println!("ctrl-c requesting exit");
+
+        // The OpenXR runtime may want to perform a smooth transition between scenes, so we
+        // can't necessarily exit instantly. Instead, we must notify the runtime of our
+        // intent and wait for it to tell us when we're actually done.
+        match xr_session.request_exit() {
+            Ok(()) => {}
+            Err(openxr::sys::Result::ERROR_SESSION_NOT_RUNNING) => return false,
+            Err(e) => panic!("{}", e),
+        }
+    }
+
+    true
+}
+
+fn handle_instance_events(
+    xr_instance: &openxr::Instance,
+    xr_session: &openxr::Session<openxr::Vulkan>,
+    event_storage: &mut openxr::EventDataBuffer,
+    session_running: &mut bool,
+) -> bool {
+    while let Some(event) = xr_instance.poll_event(event_storage).unwrap() {
+        use openxr::Event::*;
+        match event {
+            SessionStateChanged(e) => {
+                // Session state change is where we can begin and end sessions, as well as
+                // find quit messages!
+                println!("entered state {:?}", e.state());
+                match e.state() {
+                    openxr::SessionState::READY => {
+                        xr_session.begin(VIEW_TYPE).unwrap();
+                        *session_running = true;
+                    }
+                    openxr::SessionState::STOPPING => {
+                        xr_session.end().unwrap();
+                        *session_running = false;
+                    }
+                    openxr::SessionState::EXITING | openxr::SessionState::LOSS_PENDING => {
+                        return false;
+                    }
+                    _ => {}
+                }
+            }
+            InstanceLossPending(_) => {
+                return false;
+            }
+            EventsLost(e) => {
+                println!("lost {} events", e.lost_event_count());
+            }
+            _ => {}
+        }
+    }
+
+    true
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_frame(
+    environment_blend_mode: openxr::EnvironmentBlendMode,
+    device: &Device,
+    queue: &Queue,
+    uniform_layout: &BindGroupLayout,
+    render_pipeline: &RenderPipeline,
+    xr_session: &openxr::Session<openxr::Vulkan>,
+    frame_wait: &mut openxr::FrameWaiter,
+    frame_stream: &mut openxr::FrameStream<openxr::Vulkan>,
+    swapchain_desc: &indite::SwapchainDescriptor,
+    xr_swapchain_handle: &SwapchainHandle,
+    swapchain_textures: &[(Texture, TextureView)],
+    action_set_bundle: &ActionSetBundle,
+    xr_stage: &openxr::Space,
+) {
+    // Block until the previous frame is finished displaying, and is ready for another one.
+    // Also returns a prediction of when the next frame will be displayed, for use with
+    // predicting locations of controllers, viewpoints, etc.
+    let xr_frame_state = frame_wait.wait().unwrap();
+
+    // Must be called before any rendering is done!
+    frame_stream.begin().unwrap();
+
+    if !xr_frame_state.should_render {
+        frame_stream
+            .end(
+                xr_frame_state.predicted_display_time,
+                environment_blend_mode,
+                &[],
+            )
+            .unwrap();
+        return;
+    }
+
+    // We need to ask which swapchain image to use for rendering! Which one will we get?
+    // Who knows! It's up to the runtime to decide.
+    let image_index = xr_swapchain_handle.lock().unwrap().acquire_image().unwrap();
+
+    // Get the view for this frame
+    let (_, view) = &swapchain_textures[image_index as usize];
+
+    // Record the command buffer
+    // TODO: See comment below
+    //let command_buffer = record_command_buffer(device, &render_pipeline, &view);
+
+    actions::read_actions(xr_session, action_set_bundle, xr_stage, &xr_frame_state);
+
+    // Fetch the view transforms. To minimize latency, we intentionally do this *after*
+    // recording commands to render the scene, i.e. at the last possible moment before
+    // rendering begins in earnest on the GPU. Uniforms dependent on this data can be sent
+    // to the GPU just-in-time by writing them to per-frame host-visible memory which the
+    // GPU will only read once the command buffer is submitted.
+    let (_, xr_views) = xr_session
+        .locate_views(VIEW_TYPE, xr_frame_state.predicted_display_time, xr_stage)
+        .unwrap();
+
+    // TODO: Temporarily, rendering is moved after getting views, because we need to figure out
+    // how to late-update the buffers.
+    let uniform_bind_group = create_uniform_bind_group(device, uniform_layout, &xr_views);
+    let command_buffer = record_command_buffer(device, render_pipeline, view, &uniform_bind_group);
+
+    // Wait until the image is available to render to before beginning work on the GPU. The
+    // compositor could still be reading from it.
+    let mut xr_swapchain = xr_swapchain_handle.lock().unwrap();
+    xr_swapchain.wait_image(openxr::Duration::INFINITE).unwrap();
+
+    // Submit the previously prepared command buffer
+    queue.submit(Some(command_buffer));
+
+    xr_swapchain.release_image().unwrap();
+    end_frame(
+        environment_blend_mode,
         frame_stream,
-        xr_swapchain_handle,
+        swapchain_desc,
+        &xr_swapchain,
         xr_stage,
-        action_set_bundle,
-    ));
+        &xr_views,
+        &xr_frame_state,
+    );
 }
 
 fn record_command_buffer(

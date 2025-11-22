@@ -10,15 +10,45 @@ use std::{
     time::Duration,
 };
 
+use anyhow::{bail, Error};
+
 use crate::rendering::RenderContext;
 
 const VIEW_TYPE: openxr::ViewConfigurationType = openxr::ViewConfigurationType::PRIMARY_STEREO;
 
 const VIEW_COUNT: u32 = 2;
 
-pub fn main() {
+pub fn main() -> Result<(), Error> {
     let xr_entry = openxr::Entry::linked();
+    let xr_instance = create_openxr_instance(&xr_entry)?;
+    let _debug_utils = indite::DebugUtils::new(&xr_entry, &xr_instance);
 
+    // Request a form factor from the device (HMD, Handheld, etc.)
+    let xr_system = xr_instance
+        .system(openxr::FormFactor::HEAD_MOUNTED_DISPLAY)
+        .unwrap();
+
+    // Check what blend mode is valid for this device (opaque vs transparent displays). We'll just
+    // take the first one available!
+    let environment_blend_mode = xr_instance
+        .enumerate_environment_blend_modes(xr_system, VIEW_TYPE)
+        .unwrap()[0];
+
+    let render_context = RenderContext::new(&xr_instance, xr_system);
+
+    // Create and run the OpenXR session
+    run_session(
+        &xr_instance,
+        xr_system,
+        environment_blend_mode,
+        &render_context,
+    );
+
+    println!("exiting cleanly");
+    Ok(())
+}
+
+fn create_openxr_instance(xr_entry: &openxr::Entry) -> Result<openxr::Instance, Error> {
     // OpenXR will fail to initialize if we ask for an extension that OpenXR can't provide! So we
     // need to check all our extensions before initializing OpenXR with them. Note that even if the
     // extension is present, it's still possible you may not be able to use it. For example: the
@@ -30,8 +60,7 @@ pub fn main() {
     // like your rendering API might not be provided by the active runtime. APIs like OpenGL don't
     // have universal support.
     if !available_extensions.khr_vulkan_enable2 {
-        println!("vulkan openxr extension not available");
-        return;
+        bail!("vulkan openxr extension not available");
     }
 
     // Initialize OpenXR with the extensions we've found!
@@ -61,30 +90,7 @@ pub fn main() {
         instance_props.runtime_name, instance_props.runtime_version
     );
 
-    let _debug_utils = indite::DebugUtils::new(&xr_entry, &xr_instance);
-
-    // Request a form factor from the device (HMD, Handheld, etc.)
-    let xr_system = xr_instance
-        .system(openxr::FormFactor::HEAD_MOUNTED_DISPLAY)
-        .unwrap();
-
-    // Check what blend mode is valid for this device (opaque vs transparent displays). We'll just
-    // take the first one available!
-    let environment_blend_mode = xr_instance
-        .enumerate_environment_blend_modes(xr_system, VIEW_TYPE)
-        .unwrap()[0];
-
-    let render_context = RenderContext::new(&xr_instance, xr_system);
-
-    // Create and run the OpenXR session
-    run_session(
-        &xr_instance,
-        xr_system,
-        environment_blend_mode,
-        &render_context,
-    );
-
-    println!("exiting cleanly");
+    Ok(xr_instance)
 }
 
 fn run_session(
@@ -93,11 +99,7 @@ fn run_session(
     environment_blend_mode: openxr::EnvironmentBlendMode,
     render_context: &RenderContext,
 ) {
-    // Prepare the ctrl-c handler for the loop
-    let ctrlc_request_exit = Arc::new(AtomicBool::new(false));
-    let r = ctrlc_request_exit.clone();
-    let handler = move || r.store(true, Ordering::Relaxed);
-    ctrlc::set_handler(handler).unwrap();
+    let ctrlc_request_exit = create_ctrlc_handler();
 
     // A session represents this application's desire to display things! This is where we hook
     // up our graphics API. This does not start the session; for that, you'll need a call to
@@ -179,6 +181,16 @@ fn run_session(
     }
 }
 
+fn create_ctrlc_handler() -> Arc<AtomicBool> {
+    let ctrlc_request_exit = Arc::new(AtomicBool::new(false));
+    let r = ctrlc_request_exit.clone();
+
+    let handler = move || r.store(true, Ordering::Relaxed);
+    ctrlc::set_handler(handler).unwrap();
+
+    ctrlc_request_exit
+}
+
 fn handle_ctrlc(
     ctrlc_request_exit: &Arc<AtomicBool>,
     xr_session: &openxr::Session<openxr::Vulkan>,
@@ -207,9 +219,8 @@ fn handle_instance_events(
     session_running: &mut bool,
 ) -> bool {
     while let Some(event) = xr_instance.poll_event(event_storage).unwrap() {
-        use openxr::Event::*;
         match event {
-            SessionStateChanged(e) => {
+            openxr::Event::SessionStateChanged(e) => {
                 // Session state change is where we can begin and end sessions, as well as
                 // find quit messages!
                 println!("entered state {:?}", e.state());
@@ -228,10 +239,10 @@ fn handle_instance_events(
                     _ => {}
                 }
             }
-            InstanceLossPending(_) => {
+            openxr::Event::InstanceLossPending(_) => {
                 return false;
             }
-            EventsLost(e) => {
+            openxr::Event::EventsLost(e) => {
                 println!("lost {} events", e.lost_event_count());
             }
             _ => {}

@@ -33,34 +33,17 @@ fn openxr_pose_to_glam(pose: &openxr::Posef) -> (Vec3, Quat) {
 }
 
 fn openxr_projection_to_glam(view: &openxr::View) -> Mat4 {
-    // TODO: frustum_rh?
     let z_near = 0.1;
     let z_far = 100.0;
 
-    let [tan_left, tan_right, tan_down, tan_up] = [
-        view.fov.angle_left,
-        view.fov.angle_right,
-        view.fov.angle_down,
-        view.fov.angle_up,
-    ]
-    .map(f32::tan);
+    let left = convert_angle(view.fov.angle_left, z_near);
+    let right = convert_angle(view.fov.angle_right, z_near);
+    let down = convert_angle(view.fov.angle_down, z_near);
+    let up = convert_angle(view.fov.angle_up, z_near);
 
-    let tan_width = tan_right - tan_left;
-    let tan_height = tan_up - tan_down;
+    Mat4::frustum_rh(left, right, down, up, z_near, z_far)
+}
 
-    let a11 = 2.0 / tan_width;
-    let a22 = 2.0 / tan_height;
-
-    let a31 = (tan_right + tan_left) / tan_width;
-    let a32 = (tan_up + tan_down) / tan_height;
-    let a33 = -z_far / (z_far - z_near);
-
-    let a43 = -(z_far * z_near) / (z_far - z_near);
-
-    glam::Mat4::from_cols_array(&[
-        a11, 0.0, 0.0, 0.0, //
-        0.0, a22, 0.0, 0.0, //
-        a31, a32, a33, -1.0, //
-        0.0, 0.0, a43, 0.0, //
-    ])
+fn convert_angle(v: f32, z_near: f32) -> f32 {
+    f32::tan(v) * z_near
 }

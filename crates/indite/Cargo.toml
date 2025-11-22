@@ -8,4 +8,3 @@ ash.workspace = true
 anyhow.workspace = true
 openxr.workspace = true
 wgpu.workspace = true
-wgpu-hal.workspace = true

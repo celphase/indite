@@ -5,17 +5,40 @@ use ash::vk::{self, Handle};
 use wgpu::{
     Device, DeviceDescriptor, ExperimentalFeatures, Features, Instance, InstanceFlags, Limits,
     MemoryBudgetThresholds, MemoryHints, Queue, Trace,
+    hal::{Api, ExposedAdapter, api::Vulkan},
 };
-use wgpu_hal::{Api, ExposedAdapter, api::Vulkan};
 
 pub fn create_instance(
     xr_instance: &openxr::Instance,
     xr_system: openxr::SystemId,
 ) -> Result<Instance, Error> {
+    // Vulkan 1.1 guarantees multiview support
+    // It seems WGPU internally is promoting timeline_semaphore, using the core version. This isn't
+    //  actually core in 1.1 however, so use 1.2 for now.
+    let vk_target_version = vk::make_api_version(0, 1, 2, 0);
+    let vk_target_version_xr = openxr::Version::new(1, 2, 0);
+
+    // The `graphics_requirement` call is a required call. If you don't do it before anything else,
+    // things break! No, really. If your runtime doesn't break if you don't call this, good for you,
+    // but mine did! It was a gaint pain to debug! So don't remove this call!
+    let reqs = xr_instance
+        .graphics_requirements::<openxr::Vulkan>(xr_system)
+        .unwrap();
+
+    if vk_target_version_xr < reqs.min_api_version_supported
+        || vk_target_version_xr.major() > reqs.max_api_version_supported.major()
+    {
+        bail!(
+            "openxr runtime requires vulkan version > {}, <= {}",
+            reqs.min_api_version_supported,
+            reqs.max_api_version_supported.major()
+        );
+    }
+
     let vk_entry = unsafe { ash::Entry::load().unwrap() };
 
-    let (vk_target_version, vk_instance, extensions, flags) =
-        unsafe { create_vk_instance(xr_instance, xr_system, &vk_entry)? };
+    let (vk_instance, extensions, flags) =
+        unsafe { create_vk_instance(xr_instance, xr_system, &vk_entry, vk_target_version)? };
 
     // Create the WPGU instance from the raw instance
     let hal_instance = unsafe {
@@ -43,12 +66,8 @@ unsafe fn create_vk_instance(
     xr_instance: &openxr::Instance,
     xr_system: openxr::SystemId,
     vk_entry: &ash::Entry,
-) -> Result<(u32, ash::Instance, Vec<&'static CStr>, InstanceFlags), Error> {
-    // Vulkan 1.1 guarantees multiview support
-    // It seems WGPU internally is promoting timeline_semaphore, using the core version. This isn't
-    //  actually core in 1.1 however, so use 1.2 for now.
-    let vk_target_version = vk::make_api_version(0, 1, 2, 0);
-
+    vk_target_version: u32,
+) -> Result<(ash::Instance, Vec<&'static CStr>, InstanceFlags), Error> {
     let vk_app_info = vk::ApplicationInfo::default()
         .application_version(0)
         .engine_version(0)
@@ -91,7 +110,7 @@ unsafe fn create_vk_instance(
         )
     };
 
-    Ok((vk_target_version, vk_instance, extensions, flags))
+    Ok((vk_instance, extensions, flags))
 }
 
 pub fn create_device(

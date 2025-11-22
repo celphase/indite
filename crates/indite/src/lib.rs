@@ -3,8 +3,7 @@ mod debug_utils;
 mod swapchain;
 
 use ash::vk::Handle;
-use wgpu::{Device, Instance};
-use wgpu_hal::api::Vulkan;
+use wgpu::{Device, Instance, hal::api::Vulkan};
 
 pub use self::{
     context::{create_device, create_instance},
@@ -24,8 +23,8 @@ pub fn create_session(
 ) {
     let hal_instance = unsafe { instance.as_hal::<Vulkan>().unwrap() };
     let vk_instance = hal_instance.shared_instance().raw_instance();
-
     let hal_device = unsafe { device.as_hal::<Vulkan>().unwrap() };
+
     let create_info = openxr::vulkan::SessionCreateInfo {
         instance: vk_instance.handle().as_raw() as _,
         physical_device: hal_device.raw_physical_device().as_raw() as _,

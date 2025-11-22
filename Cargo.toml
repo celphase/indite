@@ -10,5 +10,4 @@ ctrlc = "3.5.1"
 glam = "0.30.9"
 openxr = "0.19.0"
 wgpu = "27.0.1"
-wgpu-hal = "27.0.4"
 indite = { path = "./crates/indite" }

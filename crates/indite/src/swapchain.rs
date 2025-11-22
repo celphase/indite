@@ -3,9 +3,8 @@ use std::sync::{Arc, Mutex};
 use ash::vk::{self, Handle};
 use wgpu::{
     Device, Extent3d, Texture, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
-    TextureUses, TextureView, TextureViewDescriptor, TextureViewDimension,
+    TextureUses, TextureView, TextureViewDescriptor, TextureViewDimension, hal::api::Vulkan,
 };
-use wgpu_hal::api::Vulkan;
 
 pub struct SwapchainDescriptor {
     pub width: u32,
@@ -97,7 +96,7 @@ unsafe fn create_swapchain_texture(
 
     let hal_device = unsafe { device.as_hal::<Vulkan>().unwrap() };
 
-    let hal_texture_desc = wgpu_hal::TextureDescriptor {
+    let hal_texture_desc = wgpu::hal::TextureDescriptor {
         label: Some("openxr swapchain texture"),
         size: Extent3d {
             width: desc.width,
@@ -109,7 +108,7 @@ unsafe fn create_swapchain_texture(
         dimension: TextureDimension::D2,
         format: TextureFormat::Rgba8UnormSrgb,
         usage: TextureUses::COLOR_TARGET | TextureUses::COPY_DST,
-        memory_flags: wgpu_hal::MemoryFlags::empty(),
+        memory_flags: wgpu::hal::MemoryFlags::empty(),
         view_formats: Vec::new(),
     };
 

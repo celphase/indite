@@ -61,7 +61,7 @@ pub fn main() {
         instance_props.runtime_name, instance_props.runtime_version
     );
 
-    let debug_utils = indite::DebugUtils::new(&xr_entry, &xr_instance);
+    let _debug_utils = indite::DebugUtils::new(&xr_entry, &xr_instance);
 
     // Request a form factor from the device (HMD, Handheld, etc.)
     let xr_system = xr_instance
@@ -83,18 +83,6 @@ pub fn main() {
         environment_blend_mode,
         &render_context,
     );
-
-    // DebugUtils must be cleaned up before cleaning up OpenXR
-    println!("cleaning openxr debug utils");
-    drop(debug_utils);
-
-    // Explicitly clean up OpenXR resources, just to make ordering clear
-    println!("cleaning openxr instance");
-    drop((xr_entry, xr_instance, xr_system));
-
-    // Drop WGPU remaining WGPU types explicitly here, again just to make ordering clear
-    println!("cleaning wgpu");
-    drop(render_context);
 
     println!("exiting cleanly");
 }
@@ -189,15 +177,6 @@ fn run_session(
             &xr_stage,
         );
     }
-
-    // Clean up anything WGPU that references OpenXR managed resources
-    println!("cleaning wgpu handles for openxr swapchain");
-    for (texture, _) in swapchain_textures {
-        texture.destroy();
-    }
-
-    // Wait until WGPU is done processing everything, so we can start cleaning resources
-    render_context.instance.poll_all(true);
 }
 
 fn handle_ctrlc(

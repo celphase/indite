@@ -21,9 +21,7 @@ pub fn create_instance(
     // The `graphics_requirement` call is a required call. If you don't do it before anything else,
     // things break! No, really. If your runtime doesn't break if you don't call this, good for you,
     // but mine did! It was a gaint pain to debug! So don't remove this call!
-    let reqs = xr_instance
-        .graphics_requirements::<openxr::Vulkan>(xr_system)
-        .unwrap();
+    let reqs = xr_instance.graphics_requirements::<openxr::Vulkan>(xr_system)?;
 
     if vk_target_version_xr < reqs.min_api_version_supported
         || vk_target_version_xr.major() > reqs.max_api_version_supported.major()
@@ -35,7 +33,7 @@ pub fn create_instance(
         );
     }
 
-    let vk_entry = unsafe { ash::Entry::load().unwrap() };
+    let vk_entry = unsafe { ash::Entry::load()? };
 
     let (vk_instance, extensions, flags) =
         unsafe { create_vk_instance(xr_instance, xr_system, &vk_entry, vk_target_version)? };
@@ -53,8 +51,7 @@ pub fn create_instance(
             MemoryBudgetThresholds::default(),
             false,
             None,
-        )
-        .unwrap()
+        )?
     };
 
     let instance = unsafe { Instance::from_hal::<Vulkan>(hal_instance) };
@@ -76,7 +73,7 @@ unsafe fn create_vk_instance(
     // Fetch extensions needed by WPGU
     let flags = InstanceFlags::empty();
     let extensions =
-        <Vulkan as Api>::Instance::desired_extensions(vk_entry, vk_target_version, flags).unwrap();
+        <Vulkan as Api>::Instance::desired_extensions(vk_entry, vk_target_version, flags)?;
     let extensions_cchar: Vec<_> = extensions.iter().map(|s| s.as_ptr()).collect();
 
     let instance_info = vk::InstanceCreateInfo::default()
@@ -119,7 +116,7 @@ pub fn create_device(
     instance: &Instance,
 ) -> Result<(Device, Queue), Error> {
     let hal_instance = unsafe { instance.as_hal::<Vulkan>() };
-    let hal_instance = hal_instance.context("wgpu backend must be vulkan")?;
+    let hal_instance = hal_instance.context("wgpu instance backend not vulkan")?;
     let shared = hal_instance.shared_instance();
 
     let vk_physical_device = get_vk_physical_device(
@@ -130,7 +127,9 @@ pub fn create_device(
     )?;
 
     // Get the WGPU adapter for the picked physical device
-    let hal_adapter = hal_instance.expose_adapter(vk_physical_device).unwrap();
+    let hal_adapter = hal_instance
+        .expose_adapter(vk_physical_device)
+        .context("failed to expose adapter")?;
 
     let (queue_family_index, wgpu_features, device_extensions, vk_device) = unsafe {
         create_vk_device(
@@ -140,24 +139,21 @@ pub fn create_device(
             shared.raw_instance(),
             vk_physical_device,
             &hal_adapter,
-        )
+        )?
     };
 
     // Get the WPGU open device for the created device
     let memory_hints = MemoryHints::default();
     let hal_device = unsafe {
-        hal_adapter
-            .adapter
-            .device_from_raw(
-                vk_device.clone(),
-                None,
-                &device_extensions,
-                wgpu_features,
-                &memory_hints,
-                queue_family_index,
-                0,
-            )
-            .unwrap()
+        hal_adapter.adapter.device_from_raw(
+            vk_device.clone(),
+            None,
+            &device_extensions,
+            wgpu_features,
+            &memory_hints,
+            queue_family_index,
+            0,
+        )?
     };
 
     // Create the WPGU Device handles from all the raw stuff we prepared
@@ -175,11 +171,7 @@ pub fn create_device(
         memory_hints,
         trace: Trace::default(),
     };
-    let (device, queue) = unsafe {
-        wgpu_adapter
-            .create_device_from_hal(hal_device, &device_desc)
-            .unwrap()
-    };
+    let (device, queue) = unsafe { wgpu_adapter.create_device_from_hal(hal_device, &device_desc)? };
 
     Ok((device, queue))
 }
@@ -214,7 +206,7 @@ unsafe fn create_vk_device(
     vk_instance: &ash::Instance,
     vk_physical_device: vk::PhysicalDevice,
     hal_adapter: &ExposedAdapter<Vulkan>,
-) -> (u32, Features, Vec<&'static CStr>, ash::Device) {
+) -> Result<(u32, Features, Vec<&'static CStr>, ash::Device), Error> {
     let queue_family_index = unsafe {
         vk_instance
             .get_physical_device_queue_family_properties(vk_physical_device)
@@ -227,7 +219,7 @@ unsafe fn create_vk_device(
                     None
                 }
             })
-            .expect("vulkan device has no graphics queue")
+            .context("vulkan device has no graphics queue")?
     };
 
     // Get the device extensions for the request WPGU features
@@ -273,17 +265,17 @@ unsafe fn create_vk_device(
     };
 
     let vk_device = vk_device
-        .expect("xr error creating vulkan device")
+        .context("xr error creating vulkan device")?
         .map_err(vk::Result::from_raw)
-        .expect("vulkan error creating vulkan device");
+        .context("vulkan error creating vulkan device")?;
 
     let vk_device =
         unsafe { ash::Device::load(vk_instance.fp_v1_0(), vk::Device::from_raw(vk_device as _)) };
 
-    (
+    Ok((
         queue_family_index,
         wgpu_features,
         device_extensions,
         vk_device,
-    )
+    ))
 }

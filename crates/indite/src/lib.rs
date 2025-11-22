@@ -2,6 +2,7 @@ mod context;
 mod debug_utils;
 mod swapchain;
 
+use anyhow::{Context, Error};
 use ash::vk::Handle;
 use wgpu::{Device, Instance, hal::api::Vulkan};
 
@@ -16,14 +17,25 @@ pub fn create_session(
     xr_system: openxr::SystemId,
     instance: &Instance,
     device: &Device,
-) -> (
-    openxr::Session<openxr::Vulkan>,
-    openxr::FrameWaiter,
-    openxr::FrameStream<openxr::Vulkan>,
-) {
-    let hal_instance = unsafe { instance.as_hal::<Vulkan>().unwrap() };
+) -> Result<
+    (
+        openxr::Session<openxr::Vulkan>,
+        openxr::FrameWaiter,
+        openxr::FrameStream<openxr::Vulkan>,
+    ),
+    Error,
+> {
+    let hal_instance = unsafe {
+        instance
+            .as_hal::<Vulkan>()
+            .context("wgpu instance backend not vulkan")?
+    };
     let vk_instance = hal_instance.shared_instance().raw_instance();
-    let hal_device = unsafe { device.as_hal::<Vulkan>().unwrap() };
+    let hal_device = unsafe {
+        device
+            .as_hal::<Vulkan>()
+            .context("wgpu device backend not vulkan")?
+    };
 
     let create_info = openxr::vulkan::SessionCreateInfo {
         instance: vk_instance.handle().as_raw() as _,
@@ -36,9 +48,9 @@ pub fn create_session(
     // Keep dependencies alive
     let guard = Box::new((instance.clone(), device.clone()));
 
-    unsafe {
-        xr_instance
-            .create_session_with_guard::<openxr::Vulkan>(xr_system, &create_info, guard)
-            .unwrap()
-    }
+    let (xr_session, xr_frame_wait, xr_frame_stream) = unsafe {
+        xr_instance.create_session_with_guard::<openxr::Vulkan>(xr_system, &create_info, guard)?
+    };
+
+    Ok((xr_session, xr_frame_wait, xr_frame_stream))
 }

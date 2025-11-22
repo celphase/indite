@@ -119,7 +119,8 @@ fn run_session(
         xr_system,
         &render_context.instance,
         &render_context.device,
-    );
+    )
+    .unwrap();
 
     // Find all the viewpoints for the view type we're using.
     let xr_view_configs = xr_instance
@@ -138,7 +139,7 @@ fn run_session(
         view_count: VIEW_COUNT,
     };
     let (xr_swapchain_handle, swapchain_textures) =
-        indite::create_swapchain(&render_context.device, &xr_session, &swapchain_desc);
+        indite::create_swapchain(&render_context.device, &xr_session, &swapchain_desc).unwrap();
 
     let action_set_bundle = actions::create_action_set(xr_instance, &xr_session);
 

@@ -1,6 +1,7 @@
 mod actions;
 mod math;
 mod rendering;
+mod session;
 
 use std::{
     sync::{
@@ -19,6 +20,8 @@ const VIEW_TYPE: openxr::ViewConfigurationType = openxr::ViewConfigurationType::
 const VIEW_COUNT: u32 = 2;
 
 pub fn main() -> Result<(), Error> {
+    let ctrlc_request_exit = create_ctrlc_handler();
+
     let xr_entry = openxr::Entry::linked();
     let xr_instance = create_openxr_instance(&xr_entry)?;
     let _debug_utils = indite::DebugUtils::new(&xr_entry, &xr_instance);
@@ -35,14 +38,42 @@ pub fn main() -> Result<(), Error> {
         .unwrap()[0];
 
     let render_context = RenderContext::new(&xr_instance, xr_system);
+    let mut session_bundle = session::create_session(&xr_instance, xr_system, &render_context);
+    let action_set_bundle = actions::create_action_set(&xr_instance, &session_bundle.xr_session);
 
-    // Create and run the OpenXR session
-    run_session(
-        &xr_instance,
-        xr_system,
-        environment_blend_mode,
-        &render_context,
-    );
+    // Main loop
+    let mut event_storage = openxr::EventDataBuffer::new();
+    let mut session_running = false;
+
+    loop {
+        let should_continue = handle_ctrlc(&ctrlc_request_exit, &session_bundle.xr_session);
+        if !should_continue {
+            break;
+        }
+
+        let should_continue = handle_instance_events(
+            &xr_instance,
+            &session_bundle.xr_session,
+            &mut event_storage,
+            &mut session_running,
+        );
+        if !should_continue {
+            break;
+        }
+
+        if !session_running {
+            // Don't hotloop the CPU
+            std::thread::sleep(Duration::from_millis(100));
+            continue;
+        }
+
+        rendering::render_frame(
+            environment_blend_mode,
+            &render_context,
+            &mut session_bundle,
+            &action_set_bundle,
+        );
+    }
 
     println!("exiting cleanly");
     Ok(())
@@ -91,94 +122,6 @@ fn create_openxr_instance(xr_entry: &openxr::Entry) -> Result<openxr::Instance, 
     );
 
     Ok(xr_instance)
-}
-
-fn run_session(
-    xr_instance: &openxr::Instance,
-    xr_system: openxr::SystemId,
-    environment_blend_mode: openxr::EnvironmentBlendMode,
-    render_context: &RenderContext,
-) {
-    let ctrlc_request_exit = create_ctrlc_handler();
-
-    // A session represents this application's desire to display things! This is where we hook
-    // up our graphics API. This does not start the session; for that, you'll need a call to
-    // Session::begin, which we do in 'main_loop below.
-    let (xr_session, mut frame_wait, mut frame_stream) = indite::create_session(
-        xr_instance,
-        xr_system,
-        &render_context.instance,
-        &render_context.device,
-    )
-    .unwrap();
-
-    // Find all the viewpoints for the view type we're using.
-    let xr_view_configs = xr_instance
-        .enumerate_view_configuration_views(xr_system, VIEW_TYPE)
-        .unwrap();
-    assert_eq!(xr_view_configs.len(), VIEW_COUNT as usize);
-
-    // We're using plain multiview rendering right now, no foviated features, so the views should be
-    // equal.
-    assert_eq!(xr_view_configs[0], xr_view_configs[1]);
-
-    // Create the swapchain for the session
-    let swapchain_desc = indite::SwapchainDescriptor {
-        width: xr_view_configs[0].recommended_image_rect_width,
-        height: xr_view_configs[0].recommended_image_rect_height,
-        view_count: VIEW_COUNT,
-    };
-    let (xr_swapchain_handle, swapchain_textures) =
-        indite::create_swapchain(&render_context.device, &xr_session, &swapchain_desc).unwrap();
-
-    let action_set_bundle = actions::create_action_set(xr_instance, &xr_session);
-
-    // OpenXR uses a couple different types of reference frames for positioning content; we need
-    // to choose one for displaying our content! STAGE would be relative to the center of your
-    // guardian system's bounds, and LOCAL would be relative to your device's starting location.
-    let xr_stage = xr_session
-        .create_reference_space(openxr::ReferenceSpaceType::STAGE, openxr::Posef::IDENTITY)
-        .unwrap();
-
-    // Main loop
-    let mut event_storage = openxr::EventDataBuffer::new();
-    let mut session_running = false;
-
-    loop {
-        let should_continue = handle_ctrlc(&ctrlc_request_exit, &xr_session);
-        if !should_continue {
-            break;
-        }
-
-        let should_continue = handle_instance_events(
-            xr_instance,
-            &xr_session,
-            &mut event_storage,
-            &mut session_running,
-        );
-        if !should_continue {
-            break;
-        }
-
-        if !session_running {
-            // Don't hotloop the CPU
-            std::thread::sleep(Duration::from_millis(100));
-            continue;
-        }
-
-        rendering::render_frame(
-            environment_blend_mode,
-            render_context,
-            &xr_session,
-            &mut frame_wait,
-            &mut frame_stream,
-            &swapchain_desc,
-            &xr_swapchain_handle,
-            &swapchain_textures,
-            &action_set_bundle,
-            &xr_stage,
-        );
-    }
 }
 
 fn create_ctrlc_handler() -> Arc<AtomicBool> {

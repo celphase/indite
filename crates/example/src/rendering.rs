@@ -7,13 +7,15 @@ use wgpu::{
     BufferUsages, Color, CommandBuffer, CommandEncoderDescriptor, Device, FragmentState, Instance,
     LoadOp, MultisampleState, Operations, PipelineLayoutDescriptor, PrimitiveState, Queue,
     RenderPassColorAttachment, RenderPassDescriptor, RenderPipeline, RenderPipelineDescriptor,
-    ShaderModuleDescriptor, ShaderSource, ShaderStages, StoreOp, Texture, TextureFormat,
-    TextureView, VertexState,
+    ShaderModuleDescriptor, ShaderSource, ShaderStages, StoreOp, TextureFormat, TextureView,
+    VertexState,
 };
 
 use crate::{
     actions::{self, ActionSetBundle},
-    math, VIEW_COUNT, VIEW_TYPE,
+    math,
+    session::SessionBundle,
+    VIEW_COUNT, VIEW_TYPE,
 };
 
 pub struct RenderContext {
@@ -130,25 +132,20 @@ fn create_render_pipeline(
 pub fn render_frame(
     environment_blend_mode: openxr::EnvironmentBlendMode,
     render_context: &RenderContext,
-    xr_session: &openxr::Session<openxr::Vulkan>,
-    frame_wait: &mut openxr::FrameWaiter,
-    frame_stream: &mut openxr::FrameStream<openxr::Vulkan>,
-    swapchain_desc: &indite::SwapchainDescriptor,
-    xr_swapchain_handle: &indite::SwapchainHandle,
-    swapchain_textures: &[(Texture, TextureView)],
+    session_bundle: &mut SessionBundle,
     action_set_bundle: &ActionSetBundle,
-    xr_stage: &openxr::Space,
 ) {
     // Block until the previous frame is finished displaying, and is ready for another one.
     // Also returns a prediction of when the next frame will be displayed, for use with
     // predicting locations of controllers, viewpoints, etc.
-    let xr_frame_state = frame_wait.wait().unwrap();
+    let xr_frame_state = session_bundle.frame_wait.wait().unwrap();
 
     // Must be called before any rendering is done!
-    frame_stream.begin().unwrap();
+    session_bundle.frame_stream.begin().unwrap();
 
     if !xr_frame_state.should_render {
-        frame_stream
+        session_bundle
+            .frame_stream
             .end(
                 xr_frame_state.predicted_display_time,
                 environment_blend_mode,
@@ -160,10 +157,15 @@ pub fn render_frame(
 
     // We need to ask which swapchain image to use for rendering! Which one will we get?
     // Who knows! It's up to the runtime to decide.
-    let image_index = xr_swapchain_handle.lock().unwrap().acquire_image().unwrap();
+    let image_index = session_bundle
+        .xr_swapchain_handle
+        .lock()
+        .unwrap()
+        .acquire_image()
+        .unwrap();
 
     // Get the view for this frame
-    let (_, view) = &swapchain_textures[image_index as usize];
+    let (_, view) = &session_bundle.swapchain_textures[image_index as usize];
 
     // Record the command buffer
     let (uniform_buffer, uniform_bind_group) =
@@ -175,15 +177,25 @@ pub fn render_frame(
         &uniform_bind_group,
     );
 
-    actions::read_actions(xr_session, action_set_bundle, xr_stage, &xr_frame_state);
+    actions::read_actions(
+        &session_bundle.xr_session,
+        action_set_bundle,
+        &session_bundle.xr_stage,
+        &xr_frame_state,
+    );
 
     // Fetch the view transforms. To minimize latency, we intentionally do this *after*
     // recording commands to render the scene, i.e. at the last possible moment before
     // rendering begins in earnest on the GPU. Uniforms dependent on this data can be sent
     // to the GPU just-in-time by writing them to per-frame host-visible memory which the
     // GPU will only read once the command buffer is submitted.
-    let (_, xr_views) = xr_session
-        .locate_views(VIEW_TYPE, xr_frame_state.predicted_display_time, xr_stage)
+    let (_, xr_views) = session_bundle
+        .xr_session
+        .locate_views(
+            VIEW_TYPE,
+            xr_frame_state.predicted_display_time,
+            &session_bundle.xr_stage,
+        )
         .unwrap();
 
     // Update bind group buffer with the eyes' matrices, as late as possible
@@ -191,7 +203,7 @@ pub fn render_frame(
 
     // Wait until the image is available to render to before beginning work on the GPU. The
     // compositor could still be reading from it.
-    let mut xr_swapchain = xr_swapchain_handle.lock().unwrap();
+    let mut xr_swapchain = session_bundle.xr_swapchain_handle.lock().unwrap();
     xr_swapchain.wait_image(openxr::Duration::INFINITE).unwrap();
 
     // Submit the previously prepared command buffer
@@ -200,10 +212,10 @@ pub fn render_frame(
     xr_swapchain.release_image().unwrap();
     end_frame(
         environment_blend_mode,
-        frame_stream,
-        swapchain_desc,
+        &mut session_bundle.frame_stream,
+        &session_bundle.swapchain_desc,
         &xr_swapchain,
-        xr_stage,
+        &session_bundle.xr_stage,
         &xr_views,
         &xr_frame_state,
     );

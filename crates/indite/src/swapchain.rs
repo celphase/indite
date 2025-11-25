@@ -132,6 +132,7 @@ unsafe fn create_swapchain_texture(
             color_image,
             &hal_texture_desc,
             Some(Box::new(drop_callback)),
+            None,
         )
     };
 

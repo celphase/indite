@@ -172,6 +172,7 @@ pub fn create_device(
             max_bind_groups: 8,
             max_storage_buffer_binding_size: wgpu_adapter.limits().max_storage_buffer_binding_size,
             max_push_constant_size: 4,
+            max_multiview_view_count: 2,
             ..Default::default()
         },
         experimental_features: ExperimentalFeatures::default(),

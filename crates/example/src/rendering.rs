@@ -14,7 +14,7 @@ use crate::{
     actions::{self, ActionSetBundle},
     math,
     session::SessionBundle,
-    VIEW_COUNT, VIEW_TYPE,
+    VIEW_TYPE,
 };
 
 pub struct RenderContext {
@@ -125,7 +125,7 @@ fn create_render_pipeline(
             count: 4,
             ..Default::default()
         },
-        multiview: NonZero::new(VIEW_COUNT),
+        multiview_mask: NonZero::new(0b11),
         cache: None,
     })
 }
@@ -249,6 +249,7 @@ fn record_command_buffer(
             depth_stencil_attachment: None,
             timestamp_writes: None,
             occlusion_query_set: None,
+            multiview_mask: NonZero::new(0b11),
         });
 
         render_pass.set_pipeline(render_pipeline);

@@ -39,21 +39,21 @@ pub fn main() -> Result<(), Error> {
 
     let render_context = RenderContext::new(&xr_instance, xr_system);
     let mut session_bundle = session::create_session(&xr_instance, xr_system, &render_context);
-    let action_set_bundle = actions::create_action_set(&xr_instance, &session_bundle.xr_session);
+    let action_set_bundle = actions::create_action_set(&xr_instance, &session_bundle.session);
 
     // Main loop
     let mut event_storage = openxr::EventDataBuffer::new();
     let mut session_running = false;
 
     loop {
-        let should_continue = handle_ctrlc(&ctrlc_request_exit, &session_bundle.xr_session);
+        let should_continue = handle_ctrlc(&ctrlc_request_exit, &session_bundle.session);
         if !should_continue {
             break;
         }
 
         let should_continue = handle_instance_events(
             &xr_instance,
-            &session_bundle.xr_session,
+            &session_bundle.session,
             &mut event_storage,
             &mut session_running,
         );

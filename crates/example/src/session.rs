@@ -1,17 +1,19 @@
 use indite::{SwapchainDescriptor, SwapchainHandle};
-use wgpu::{Texture, TextureView};
+use wgpu::{Texture, TextureFormat, TextureUsages, TextureView};
 
 use crate::{rendering::RenderContext, VIEW_COUNT, VIEW_TYPE};
 
 pub struct SessionBundle {
-    pub xr_session: openxr::Session<openxr::Vulkan>,
+    pub session: openxr::Session<openxr::Vulkan>,
     pub frame_wait: openxr::FrameWaiter,
     pub frame_stream: openxr::FrameStream<openxr::Vulkan>,
 
     pub swapchain_desc: SwapchainDescriptor,
-    pub xr_swapchain_handle: SwapchainHandle,
+    pub swapchain_handle: SwapchainHandle,
     pub swapchain_textures: Vec<(Texture, TextureView)>,
-    pub xr_stage: openxr::Space,
+    pub stage: openxr::Space,
+
+    pub multisampled_framebuffer: TextureView,
 }
 
 pub fn create_session(
@@ -46,24 +48,55 @@ pub fn create_session(
         height: xr_view_configs[0].recommended_image_rect_height,
         view_count: VIEW_COUNT,
     };
-    let (xr_swapchain_handle, swapchain_textures) =
+    let (swapchain_handle, swapchain_textures) =
         indite::create_swapchain(&render_context.device, &xr_session, &swapchain_desc).unwrap();
 
     // OpenXR uses a couple different types of reference frames for positioning content; we need
     // to choose one for displaying our content! STAGE would be relative to the center of your
     // guardian system's bounds, and LOCAL would be relative to your device's starting location.
-    let xr_stage = xr_session
+    let stage = xr_session
         .create_reference_space(openxr::ReferenceSpaceType::STAGE, openxr::Posef::IDENTITY)
         .unwrap();
 
+    let multisampled_framebuffer =
+        create_multisampled_framebuffer(&render_context.device, &swapchain_desc);
+
     SessionBundle {
-        xr_session,
+        session: xr_session,
         frame_wait,
         frame_stream,
 
         swapchain_desc,
-        xr_swapchain_handle,
+        swapchain_handle,
         swapchain_textures,
-        xr_stage,
+        stage,
+
+        multisampled_framebuffer,
     }
+}
+
+fn create_multisampled_framebuffer(
+    device: &wgpu::Device,
+    swapchain_desc: &SwapchainDescriptor,
+) -> wgpu::TextureView {
+    let size = wgpu::Extent3d {
+        width: swapchain_desc.width,
+        height: swapchain_desc.height,
+        depth_or_array_layers: swapchain_desc.view_count,
+    };
+    let desc = &wgpu::TextureDescriptor {
+        label: Some("multisampled-framebuffer"),
+        size,
+        mip_level_count: 1,
+        sample_count: 4,
+        dimension: wgpu::TextureDimension::D2,
+        format: TextureFormat::Rgba8UnormSrgb,
+        usage: TextureUsages::RENDER_ATTACHMENT,
+        // TODO add once supported: TextureUsages::TRANSIENT
+        view_formats: &[],
+    };
+
+    device
+        .create_texture(desc)
+        .create_view(&wgpu::TextureViewDescriptor::default())
 }

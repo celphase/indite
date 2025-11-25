@@ -5,10 +5,9 @@ use wgpu::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindGroupLayoutDescriptor,
     BindGroupLayoutEntry, BindingType, Buffer, BufferBindingType, BufferDescriptor, BufferSize,
     BufferUsages, Color, CommandBuffer, CommandEncoderDescriptor, Device, FragmentState, Instance,
-    LoadOp, MultisampleState, Operations, PipelineLayoutDescriptor, PrimitiveState, Queue,
-    RenderPassColorAttachment, RenderPassDescriptor, RenderPipeline, RenderPipelineDescriptor,
-    ShaderModuleDescriptor, ShaderSource, ShaderStages, StoreOp, TextureFormat, TextureView,
-    VertexState,
+    LoadOp, Operations, PipelineLayoutDescriptor, PrimitiveState, Queue, RenderPassColorAttachment,
+    RenderPassDescriptor, RenderPipeline, RenderPipelineDescriptor, ShaderModuleDescriptor,
+    ShaderSource, ShaderStages, StoreOp, TextureFormat, TextureView, VertexState,
 };
 
 use crate::{
@@ -122,7 +121,10 @@ fn create_render_pipeline(
         }),
         primitive: PrimitiveState::default(),
         depth_stencil: None,
-        multisample: MultisampleState::default(),
+        multisample: wgpu::MultisampleState {
+            count: 4,
+            ..Default::default()
+        },
         multiview: NonZero::new(VIEW_COUNT),
         cache: None,
     })
@@ -158,7 +160,7 @@ pub fn render_frame(
     // We need to ask which swapchain image to use for rendering! Which one will we get?
     // Who knows! It's up to the runtime to decide.
     let image_index = session_bundle
-        .xr_swapchain_handle
+        .swapchain_handle
         .lock()
         .unwrap()
         .acquire_image()
@@ -173,14 +175,15 @@ pub fn render_frame(
     let command_buffer = record_command_buffer(
         &render_context.device,
         &render_context.render_pipeline,
+        &session_bundle.multisampled_framebuffer,
         view,
         &uniform_bind_group,
     );
 
     actions::read_actions(
-        &session_bundle.xr_session,
+        &session_bundle.session,
         action_set_bundle,
-        &session_bundle.xr_stage,
+        &session_bundle.stage,
         &xr_frame_state,
     );
 
@@ -190,11 +193,11 @@ pub fn render_frame(
     // to the GPU just-in-time by writing them to per-frame host-visible memory which the
     // GPU will only read once the command buffer is submitted.
     let (_, xr_views) = session_bundle
-        .xr_session
+        .session
         .locate_views(
             VIEW_TYPE,
             xr_frame_state.predicted_display_time,
-            &session_bundle.xr_stage,
+            &session_bundle.stage,
         )
         .unwrap();
 
@@ -203,7 +206,7 @@ pub fn render_frame(
 
     // Wait until the image is available to render to before beginning work on the GPU. The
     // compositor could still be reading from it.
-    let mut xr_swapchain = session_bundle.xr_swapchain_handle.lock().unwrap();
+    let mut xr_swapchain = session_bundle.swapchain_handle.lock().unwrap();
     xr_swapchain.wait_image(openxr::Duration::INFINITE).unwrap();
 
     // Submit the previously prepared command buffer
@@ -215,7 +218,7 @@ pub fn render_frame(
         &mut session_bundle.frame_stream,
         &session_bundle.swapchain_desc,
         &xr_swapchain,
-        &session_bundle.xr_stage,
+        &session_bundle.stage,
         &xr_views,
         &xr_frame_state,
     );
@@ -224,23 +227,25 @@ pub fn render_frame(
 fn record_command_buffer(
     device: &Device,
     render_pipeline: &RenderPipeline,
+    multisampled_framebuffer: &TextureView,
     view: &TextureView,
     uniform_bind_group: &BindGroup,
 ) -> CommandBuffer {
     let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor { label: None });
 
     {
+        let attachment = RenderPassColorAttachment {
+            view: multisampled_framebuffer,
+            depth_slice: None,
+            resolve_target: Some(view),
+            ops: Operations {
+                load: LoadOp::Clear(Color::GREEN),
+                store: StoreOp::Store,
+            },
+        };
         let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
             label: None,
-            color_attachments: &[Some(RenderPassColorAttachment {
-                view,
-                depth_slice: None,
-                resolve_target: None,
-                ops: Operations {
-                    load: LoadOp::Clear(Color::GREEN),
-                    store: StoreOp::Store,
-                },
-            })],
+            color_attachments: &[Some(attachment)],
             depth_stencil_attachment: None,
             timestamp_writes: None,
             occlusion_query_set: None,
@@ -250,6 +255,7 @@ fn record_command_buffer(
         render_pass.set_bind_group(0, uniform_bind_group, &[]);
         render_pass.draw(0..3, 0..1);
     }
+
     encoder.finish()
 }
 

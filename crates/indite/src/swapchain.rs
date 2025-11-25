@@ -25,9 +25,6 @@ pub fn create_swapchain(
     xr_session: &openxr::Session<openxr::Vulkan>,
     desc: &SwapchainDescriptor,
 ) -> Result<(SwapchainHandle, Vec<(Texture, TextureView)>), Error> {
-    // Create a swapchain for the viewpoints! A swapchain is a set of texture buffers
-    // used for displaying to screen, typically this is a backbuffer and a front buffer,
-    // one for rendering data to, and one for displaying on-screen.
     let swapchain_resolution = vk::Extent2D {
         width: desc.width,
         height: desc.height,
@@ -37,9 +34,6 @@ pub fn create_swapchain(
         usage_flags: openxr::SwapchainUsageFlags::COLOR_ATTACHMENT
             | openxr::SwapchainUsageFlags::SAMPLED,
         format: vk::Format::R8G8B8A8_SRGB.as_raw() as _,
-        // The Vulkan graphics pipeline we create is not set up for multisampling,
-        // so we hardcode this to 1. If we used a proper multisampling setup, we
-        // could set this to `views[0].recommended_swapchain_sample_count`.
         sample_count: 1,
         width: swapchain_resolution.width,
         height: swapchain_resolution.height,
@@ -114,7 +108,7 @@ unsafe fn create_swapchain_texture(
         size: Extent3d {
             width: desc.width,
             height: desc.height,
-            depth_or_array_layers: 2,
+            depth_or_array_layers: desc.view_count,
         },
         mip_level_count: 1,
         sample_count: 1,
@@ -146,7 +140,7 @@ unsafe fn create_swapchain_texture(
         size: Extent3d {
             width: desc.width,
             height: desc.height,
-            depth_or_array_layers: 2,
+            depth_or_array_layers: desc.view_count,
         },
         mip_level_count: 1,
         sample_count: 1,

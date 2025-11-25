@@ -131,7 +131,13 @@ pub fn create_device(
         .expose_adapter(vk_physical_device)
         .context("failed to expose adapter")?;
 
-    let (queue_family_index, wgpu_features, device_extensions, vk_device) = unsafe {
+    let features =
+        // Required for efficiently rendering both sides
+        Features::MULTIVIEW |
+        // Required for MSAA rendering, we need a texture that's both an array and has multisample
+        Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES;
+
+    let (queue_family_index, device_extensions, vk_device) = unsafe {
         create_vk_device(
             xr_instance,
             xr_system,
@@ -139,6 +145,7 @@ pub fn create_device(
             shared.raw_instance(),
             vk_physical_device,
             &hal_adapter,
+            features,
         )?
     };
 
@@ -149,7 +156,7 @@ pub fn create_device(
             vk_device.clone(),
             None,
             &device_extensions,
-            wgpu_features,
+            features,
             &memory_hints,
             queue_family_index,
             0,
@@ -160,7 +167,7 @@ pub fn create_device(
     let wgpu_adapter = unsafe { instance.create_adapter_from_hal(hal_adapter) };
     let device_desc = DeviceDescriptor {
         label: Some("vr device"),
-        required_features: wgpu_features,
+        required_features: features,
         required_limits: Limits {
             max_bind_groups: 8,
             max_storage_buffer_binding_size: wgpu_adapter.limits().max_storage_buffer_binding_size,
@@ -206,7 +213,8 @@ unsafe fn create_vk_device(
     vk_instance: &ash::Instance,
     vk_physical_device: vk::PhysicalDevice,
     hal_adapter: &ExposedAdapter<Vulkan>,
-) -> Result<(u32, Features, Vec<&'static CStr>, ash::Device), Error> {
+    features: Features,
+) -> Result<(u32, Vec<&'static CStr>, ash::Device), Error> {
     let queue_family_index = unsafe {
         vk_instance
             .get_physical_device_queue_family_properties(vk_physical_device)
@@ -223,16 +231,12 @@ unsafe fn create_vk_device(
     };
 
     // Get the device extensions for the request WPGU features
-    let wgpu_features = Features::MULTIVIEW;
-
-    let device_extensions = hal_adapter
-        .adapter
-        .required_device_extensions(wgpu_features);
+    let device_extensions = hal_adapter.adapter.required_device_extensions(features);
     let device_extensions_cchar: Vec<_> = device_extensions.iter().map(|s| s.as_ptr()).collect();
 
     let mut enabled_phd_features = hal_adapter
         .adapter
-        .physical_device_features(&device_extensions, wgpu_features);
+        .physical_device_features(&device_extensions, features);
 
     let queue_info = vk::DeviceQueueCreateInfo::default()
         .queue_family_index(queue_family_index)
@@ -272,10 +276,5 @@ unsafe fn create_vk_device(
     let vk_device =
         unsafe { ash::Device::load(vk_instance.fp_v1_0(), vk::Device::from_raw(vk_device as _)) };
 
-    Ok((
-        queue_family_index,
-        wgpu_features,
-        device_extensions,
-        vk_device,
-    ))
+    Ok((queue_family_index, device_extensions, vk_device))
 }

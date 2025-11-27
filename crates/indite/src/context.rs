@@ -115,6 +115,12 @@ pub fn create_device(
     xr_system: openxr::SystemId,
     instance: &Instance,
 ) -> Result<(Device, Queue), Error> {
+    let required_features =
+        // Required for efficiently rendering both sides
+        Features::MULTIVIEW |
+        // Required for MSAA rendering, we need a texture that's both an array and has multisample
+        Features::MULTISAMPLE_ARRAY;
+
     let hal_instance = unsafe { instance.as_hal::<Vulkan>() };
     let hal_instance = hal_instance.context("wgpu instance backend not vulkan")?;
     let shared = hal_instance.shared_instance();
@@ -131,11 +137,11 @@ pub fn create_device(
         .expose_adapter(vk_physical_device)
         .context("failed to expose adapter")?;
 
-    let features =
-        // Required for efficiently rendering both sides
-        Features::MULTIVIEW |
-        // Required for MSAA rendering, we need a texture that's both an array and has multisample
-        Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES;
+    // Verify all features were exposed by the adapter
+    if !hal_adapter.features.contains(required_features) {
+        let unsupported = required_features - hal_adapter.features;
+        bail!("unsupported features: {}", unsupported);
+    }
 
     let (queue_family_index, device_extensions, vk_device) = unsafe {
         create_vk_device(
@@ -145,7 +151,7 @@ pub fn create_device(
             shared.raw_instance(),
             vk_physical_device,
             &hal_adapter,
-            features,
+            required_features,
         )?
     };
 
@@ -156,7 +162,7 @@ pub fn create_device(
             vk_device.clone(),
             None,
             &device_extensions,
-            features,
+            required_features,
             &memory_hints,
             queue_family_index,
             0,
@@ -167,7 +173,7 @@ pub fn create_device(
     let wgpu_adapter = unsafe { instance.create_adapter_from_hal(hal_adapter) };
     let device_desc = DeviceDescriptor {
         label: Some("vr device"),
-        required_features: features,
+        required_features,
         required_limits: Limits {
             max_bind_groups: 8,
             max_storage_buffer_binding_size: wgpu_adapter.limits().max_storage_buffer_binding_size,
@@ -235,7 +241,7 @@ unsafe fn create_vk_device(
     let device_extensions = hal_adapter.adapter.required_device_extensions(features);
     let device_extensions_cchar: Vec<_> = device_extensions.iter().map(|s| s.as_ptr()).collect();
 
-    let mut enabled_phd_features = hal_adapter
+    let mut enabled_physical_device_features = hal_adapter
         .adapter
         .physical_device_features(&device_extensions, features);
 
@@ -252,7 +258,7 @@ unsafe fn create_vk_device(
         .queue_create_infos(&queue_infos)
         .enabled_extension_names(&device_extensions_cchar)
         .push_next(&mut multiview_features);
-    let device_info = enabled_phd_features.add_to_device_create(device_info);
+    let device_info = enabled_physical_device_features.add_to_device_create(device_info);
 
     let get_instance_proc_addr = unsafe {
         std::mem::transmute::<

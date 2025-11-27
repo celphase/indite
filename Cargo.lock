@@ -506,7 +506,6 @@ dependencies = [
 [[package]]
 name = "naga"
 version = "27.0.0"
-source = "git+https://github.com/celphase/wgpu#5e05a96217f6537024120f60c30e7cf75ed7cd53"
 dependencies = [
  "arrayvec",
  "bit-set",
@@ -939,7 +938,6 @@ dependencies = [
 [[package]]
 name = "wgpu"
 version = "27.0.0"
-source = "git+https://github.com/celphase/wgpu#5e05a96217f6537024120f60c30e7cf75ed7cd53"
 dependencies = [
  "arrayvec",
  "bitflags",
@@ -966,7 +964,6 @@ dependencies = [
 [[package]]
 name = "wgpu-core"
 version = "27.0.0"
-source = "git+https://github.com/celphase/wgpu#5e05a96217f6537024120f60c30e7cf75ed7cd53"
 dependencies = [
  "arrayvec",
  "bit-set",
@@ -997,7 +994,6 @@ dependencies = [
 [[package]]
 name = "wgpu-core-deps-apple"
 version = "27.0.0"
-source = "git+https://github.com/celphase/wgpu#5e05a96217f6537024120f60c30e7cf75ed7cd53"
 dependencies = [
  "wgpu-hal",
 ]
@@ -1005,7 +1001,6 @@ dependencies = [
 [[package]]
 name = "wgpu-core-deps-emscripten"
 version = "27.0.0"
-source = "git+https://github.com/celphase/wgpu#5e05a96217f6537024120f60c30e7cf75ed7cd53"
 dependencies = [
  "wgpu-hal",
 ]
@@ -1013,7 +1008,6 @@ dependencies = [
 [[package]]
 name = "wgpu-core-deps-windows-linux-android"
 version = "27.0.0"
-source = "git+https://github.com/celphase/wgpu#5e05a96217f6537024120f60c30e7cf75ed7cd53"
 dependencies = [
  "wgpu-hal",
 ]
@@ -1021,7 +1015,6 @@ dependencies = [
 [[package]]
 name = "wgpu-hal"
 version = "27.0.0"
-source = "git+https://github.com/celphase/wgpu#5e05a96217f6537024120f60c30e7cf75ed7cd53"
 dependencies = [
  "android_system_properties",
  "arrayvec",
@@ -1069,7 +1062,6 @@ dependencies = [
 [[package]]
 name = "wgpu-types"
 version = "27.0.0"
-source = "git+https://github.com/celphase/wgpu#5e05a96217f6537024120f60c30e7cf75ed7cd53"
 dependencies = [
  "bitflags",
  "bytemuck",

@@ -240,7 +240,7 @@ fn record_command_buffer(
             resolve_target: Some(view),
             ops: Operations {
                 load: LoadOp::Clear(Color::GREEN),
-                store: StoreOp::Store,
+                store: StoreOp::Discard,
             },
         };
         let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {

@@ -91,8 +91,7 @@ fn create_multisampled_framebuffer(
         sample_count: 4,
         dimension: wgpu::TextureDimension::D2,
         format: TextureFormat::Rgba8UnormSrgb,
-        usage: TextureUsages::RENDER_ATTACHMENT,
-        // TODO add once supported: TextureUsages::TRANSIENT
+        usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TRANSIENT,
         view_formats: &[],
     };
 

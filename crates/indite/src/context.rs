@@ -175,8 +175,6 @@ pub fn create_device(
         label: Some("vr device"),
         required_features,
         required_limits: Limits {
-            max_bind_groups: 8,
-            max_storage_buffer_binding_size: wgpu_adapter.limits().max_storage_buffer_binding_size,
             max_multiview_view_count: 2,
             ..Default::default()
         },

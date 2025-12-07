@@ -5,7 +5,7 @@ use ash::vk::{self, Handle};
 use wgpu::{
     Device, Extent3d, Texture, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
     TextureUses, TextureView, TextureViewDescriptor, TextureViewDimension,
-    hal::{Api, api::Vulkan},
+    hal::{Api, api::Vulkan, vulkan::TextureMemory},
 };
 
 pub struct SwapchainDescriptor {
@@ -132,7 +132,7 @@ unsafe fn create_swapchain_texture(
             color_image,
             &hal_texture_desc,
             Some(Box::new(drop_callback)),
-            None,
+            TextureMemory::External,
         )
     };
 

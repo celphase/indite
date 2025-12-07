@@ -101,7 +101,7 @@ fn create_render_pipeline(
     let pipeline_layout = wgpu_device.create_pipeline_layout(&PipelineLayoutDescriptor {
         label: None,
         bind_group_layouts: &[uniform_layout],
-        push_constant_ranges: &[],
+        immediates_ranges: &[],
     });
 
     wgpu_device.create_render_pipeline(&RenderPipelineDescriptor {

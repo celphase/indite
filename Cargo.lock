@@ -411,9 +411,9 @@ checksum = "8eaf4bc02d17cbdd7ff4c7438cafcdf7fb9a4613313ad11b4f8fefe7d3fa0130"
 
 [[package]]
 name = "js-sys"
-version = "0.3.82"
+version = "0.3.83"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b011eec8cc36da2aab2d5cff675ec18454fad408585853910a202391cf9f8e65"
+checksum = "464a3709c7f55f1f721e5389aa6ea4e3bc6aba669353300af094b29ffbdde1d8"
 dependencies = [
  "once_cell",
  "wasm-bindgen",
@@ -438,9 +438,9 @@ checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
 
 [[package]]
 name = "libc"
-version = "0.2.177"
+version = "0.2.178"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2874a2af47a2325c2001a6e6fad9b16a53b802102b528163885171cf92b15976"
+checksum = "37c93d8daa9d8a012fd8ab92f088405fb202ea0b6ab73ee2482ae66af4f42091"
 
 [[package]]
 name = "libloading"
@@ -475,9 +475,9 @@ dependencies = [
 
 [[package]]
 name = "log"
-version = "0.4.28"
+version = "0.4.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "34080505efa8e45a4b816c349525ebe327ceaa8559756f0356cba97ef3bf7432"
+checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
 
 [[package]]
 name = "malloc_buf"
@@ -506,6 +506,7 @@ dependencies = [
 [[package]]
 name = "naga"
 version = "27.0.0"
+source = "git+https://github.com/gfx-rs/wgpu.git?rev=21e6143#21e6143ed048f9ad3c3f7a8c4afc8a0e9a9c0760"
 dependencies = [
  "arrayvec",
  "bit-set",
@@ -781,9 +782,9 @@ dependencies = [
 
 [[package]]
 name = "slotmap"
-version = "1.0.7"
+version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dbff4acf519f630b3a3ddcfaea6c06b42174d9a44bc70c620e9ed1649d58b82a"
+checksum = "bdd58c3c93c3d278ca835519292445cb4b0d4dc59ccfdf7ceadaab3f8aeb4038"
 dependencies = [
  "version_check",
 ]
@@ -869,9 +870,9 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "wasm-bindgen"
-version = "0.2.105"
+version = "0.2.106"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da95793dfc411fbbd93f5be7715b0578ec61fe87cb1a42b12eb625caa5c5ea60"
+checksum = "0d759f433fa64a2d763d1340820e46e111a7a5ab75f993d1852d70b03dbb80fd"
 dependencies = [
  "cfg-if",
  "once_cell",
@@ -882,9 +883,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-futures"
-version = "0.4.55"
+version = "0.4.56"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "551f88106c6d5e7ccc7cd9a16f312dd3b5d36ea8b4954304657d5dfba115d4a0"
+checksum = "836d9622d604feee9e5de25ac10e3ea5f2d65b41eac0d9ce72eb5deae707ce7c"
 dependencies = [
  "cfg-if",
  "js-sys",
@@ -895,9 +896,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-macro"
-version = "0.2.105"
+version = "0.2.106"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04264334509e04a7bf8690f2384ef5265f05143a4bff3889ab7a3269adab59c2"
+checksum = "48cb0d2638f8baedbc542ed444afc0644a29166f1595371af4fecf8ce1e7eeb3"
 dependencies = [
  "quote",
  "wasm-bindgen-macro-support",
@@ -905,9 +906,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-macro-support"
-version = "0.2.105"
+version = "0.2.106"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "420bc339d9f322e562942d52e115d57e950d12d88983a14c79b86859ee6c7ebc"
+checksum = "cefb59d5cd5f92d9dcf80e4683949f15ca4b511f4ac0a6e14d4e1ac60c6ecd40"
 dependencies = [
  "bumpalo",
  "proc-macro2",
@@ -918,18 +919,18 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-shared"
-version = "0.2.105"
+version = "0.2.106"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76f218a38c84bcb33c25ec7059b07847d465ce0e0a76b995e134a45adcb6af76"
+checksum = "cbc538057e648b67f72a982e708d485b2efa771e1ac05fec311f9f63e5800db4"
 dependencies = [
  "unicode-ident",
 ]
 
 [[package]]
 name = "web-sys"
-version = "0.3.82"
+version = "0.3.83"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a1f95c0d03a47f4ae1f7a64643a6bb97465d9b740f0fa8f90ea33915c99a9a1"
+checksum = "9b32828d774c412041098d182a8b38b16ea816958e07cf40eec2bc080ae137ac"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
@@ -938,12 +939,15 @@ dependencies = [
 [[package]]
 name = "wgpu"
 version = "27.0.0"
+source = "git+https://github.com/gfx-rs/wgpu.git?rev=21e6143#21e6143ed048f9ad3c3f7a8c4afc8a0e9a9c0760"
 dependencies = [
  "arrayvec",
  "bitflags",
+ "bytemuck",
  "cfg-if",
  "cfg_aliases",
  "document-features",
+ "hashbrown 0.16.1",
  "js-sys",
  "log",
  "naga",
@@ -964,6 +968,7 @@ dependencies = [
 [[package]]
 name = "wgpu-core"
 version = "27.0.0"
+source = "git+https://github.com/gfx-rs/wgpu.git?rev=21e6143#21e6143ed048f9ad3c3f7a8c4afc8a0e9a9c0760"
 dependencies = [
  "arrayvec",
  "bit-set",
@@ -994,6 +999,7 @@ dependencies = [
 [[package]]
 name = "wgpu-core-deps-apple"
 version = "27.0.0"
+source = "git+https://github.com/gfx-rs/wgpu.git?rev=21e6143#21e6143ed048f9ad3c3f7a8c4afc8a0e9a9c0760"
 dependencies = [
  "wgpu-hal",
 ]
@@ -1001,6 +1007,7 @@ dependencies = [
 [[package]]
 name = "wgpu-core-deps-emscripten"
 version = "27.0.0"
+source = "git+https://github.com/gfx-rs/wgpu.git?rev=21e6143#21e6143ed048f9ad3c3f7a8c4afc8a0e9a9c0760"
 dependencies = [
  "wgpu-hal",
 ]
@@ -1008,6 +1015,7 @@ dependencies = [
 [[package]]
 name = "wgpu-core-deps-windows-linux-android"
 version = "27.0.0"
+source = "git+https://github.com/gfx-rs/wgpu.git?rev=21e6143#21e6143ed048f9ad3c3f7a8c4afc8a0e9a9c0760"
 dependencies = [
  "wgpu-hal",
 ]
@@ -1015,6 +1023,7 @@ dependencies = [
 [[package]]
 name = "wgpu-hal"
 version = "27.0.0"
+source = "git+https://github.com/gfx-rs/wgpu.git?rev=21e6143#21e6143ed048f9ad3c3f7a8c4afc8a0e9a9c0760"
 dependencies = [
  "android_system_properties",
  "arrayvec",
@@ -1062,6 +1071,7 @@ dependencies = [
 [[package]]
 name = "wgpu-types"
 version = "27.0.0"
+source = "git+https://github.com/gfx-rs/wgpu.git?rev=21e6143#21e6143ed048f9ad3c3f7a8c4afc8a0e9a9c0760"
 dependencies = [
  "bitflags",
  "bytemuck",
@@ -1206,18 +1216,18 @@ checksum = "3ae8337f8a065cfc972643663ea4279e04e7256de865aa66fe25cec5fb912d3f"
 
 [[package]]
 name = "zerocopy"
-version = "0.8.30"
+version = "0.8.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ea879c944afe8a2b25fef16bb4ba234f47c694565e97383b36f3a878219065c"
+checksum = "fd74ec98b9250adb3ca554bdde269adf631549f51d8a8f8f0a10b50f1cb298c3"
 dependencies = [
  "zerocopy-derive",
 ]
 
 [[package]]
 name = "zerocopy-derive"
-version = "0.8.30"
+version = "0.8.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf955aa904d6040f70dc8e9384444cb1030aed272ba3cb09bbc4ab9e7c1f34f5"
+checksum = "d8a8d209fdf45cf5138cbb5a506f6b52522a25afccc534d1475dad8e31105c6a"
 dependencies = [
  "proc-macro2",
  "quote",

@@ -41,8 +41,8 @@ pub fn create_instance(
     // Create the WPGU instance from the raw instance
     let hal_instance = unsafe {
         <Vulkan as Api>::Instance::from_raw(
-            vk_entry.clone(),
-            vk_instance.clone(),
+            vk_entry,
+            vk_instance,
             vk_target_version,
             0,
             None,
@@ -120,6 +120,10 @@ pub fn create_device(
         Features::MULTIVIEW |
         // Required for MSAA rendering, we need a texture that's both an array and has multisample
         Features::MULTISAMPLE_ARRAY;
+    let required_limits = Limits {
+        max_multiview_view_count: 2,
+        ..Default::default()
+    };
 
     let hal_instance = unsafe { instance.as_hal::<Vulkan>() };
     let hal_instance = hal_instance.context("wgpu instance backend not vulkan")?;
@@ -174,10 +178,7 @@ pub fn create_device(
     let device_desc = DeviceDescriptor {
         label: Some("vr device"),
         required_features,
-        required_limits: Limits {
-            max_multiview_view_count: 2,
-            ..Default::default()
-        },
+        required_limits,
         experimental_features: ExperimentalFeatures::default(),
         memory_hints,
         trace: Trace::default(),
@@ -246,15 +247,10 @@ unsafe fn create_vk_device(
         .queue_family_index(queue_family_index)
         .queue_priorities(&[1.0]);
     let queue_infos = [queue_info];
-    let mut multiview_features = vk::PhysicalDeviceMultiviewFeatures {
-        multiview: vk::TRUE,
-        ..Default::default()
-    };
 
     let device_info = vk::DeviceCreateInfo::default()
         .queue_create_infos(&queue_infos)
-        .enabled_extension_names(&device_extensions_cchar)
-        .push_next(&mut multiview_features);
+        .enabled_extension_names(&device_extensions_cchar);
     let device_info = enabled_physical_device_features.add_to_device_create(device_info);
 
     let get_instance_proc_addr = unsafe {

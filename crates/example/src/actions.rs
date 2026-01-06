@@ -53,18 +53,10 @@ pub fn create_action_set(
 
     // Create an action space for each device we want to locate
     let left_space = left_action
-        .create_space(
-            xr_session.clone(),
-            openxr::Path::NULL,
-            openxr::Posef::IDENTITY,
-        )
+        .create_space(xr_session, openxr::Path::NULL, openxr::Posef::IDENTITY)
         .unwrap();
     let right_space = right_action
-        .create_space(
-            xr_session.clone(),
-            openxr::Path::NULL,
-            openxr::Posef::IDENTITY,
-        )
+        .create_space(xr_session, openxr::Path::NULL, openxr::Posef::IDENTITY)
         .unwrap();
 
     ActionSetBundle {

@@ -25,7 +25,7 @@ pub fn main() -> Result<(), Error> {
     let platform_info = ();
     let xr_entry = openxr::Entry::linked(&platform_info).unwrap();
     let xr_instance = create_openxr_instance(platform_info, &xr_entry)?;
-    let _debug_utils = indite::DebugUtils::new(&xr_entry, &xr_instance);
+    let _debug_utils = indite::DebugUtils::new(&xr_entry, &xr_instance)?;
 
     // Request a form factor from the device (HMD, Handheld, etc.)
     let xr_system = xr_instance

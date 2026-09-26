@@ -1,5 +1,6 @@
 use std::ffi::CStr;
 
+use anyhow::{Error, bail};
 use openxr::{
     Entry, Instance,
     raw::DebugUtilsEXT,
@@ -20,8 +21,8 @@ pub struct DebugUtils {
 }
 
 impl DebugUtils {
-    pub fn new(xr_entry: &Entry, xr_instance: &Instance) -> Option<Self> {
-        let debug_utils = unsafe { DebugUtilsEXT::load(xr_entry, xr_instance.as_raw()).ok()? };
+    pub fn new(xr_entry: &Entry, xr_instance: &Instance) -> Result<Self, Error> {
+        let debug_utils = unsafe { DebugUtilsEXT::load(xr_entry, xr_instance.as_raw())? };
 
         let mut debug_messenger = DebugUtilsMessengerEXT::default();
 
@@ -39,14 +40,19 @@ impl DebugUtils {
                 user_callback: Some(handle_validation_message),
                 user_data: std::ptr::null_mut(),
             };
-            (debug_utils.create_debug_utils_messenger)(
+            let result = (debug_utils.create_debug_utils_messenger)(
                 xr_instance.as_raw(),
                 &debug_info,
                 &mut debug_messenger,
             );
+
+            // Validate creation actually succeeded
+            if result != openxr::sys::Result::SUCCESS {
+                bail!("failed to create debug utils messenger: {:?}", result);
+            }
         }
 
-        Some(Self {
+        Ok(Self {
             _xr_entry: xr_entry.clone(),
             _xr_instance: xr_instance.clone(),
 

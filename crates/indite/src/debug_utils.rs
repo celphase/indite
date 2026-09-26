@@ -64,6 +64,10 @@ impl DebugUtils {
 
 impl Drop for DebugUtils {
     fn drop(&mut self) {
+        // `xrDestroyDebugUtilsMessengerEXT` in upstream XR_APILAYER_LUNARG_core_validation checks
+        // for valid handle in the global handle-validity map, but `xrCreateDebugUtilsMessengerEXT`
+        // only crates the handle in `gen_instance_info->debug_messengers`. This causes a spurious
+        // "Invalid XrDebugUtilsMessengerEXT handle" error.
         unsafe {
             (self._debug_utils.destroy_debug_utils_messenger)(self.debug_messenger);
         }

@@ -167,6 +167,7 @@ pub fn create_device(
             None,
             &device_extensions,
             required_features,
+            &required_limits,
             &memory_hints,
             queue_family_index,
             0,

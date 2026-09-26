@@ -22,8 +22,9 @@ const VIEW_COUNT: u32 = 2;
 pub fn main() -> Result<(), Error> {
     let ctrlc_request_exit = create_ctrlc_handler();
 
-    let xr_entry = openxr::Entry::linked();
-    let xr_instance = create_openxr_instance(&xr_entry)?;
+    let platform_info = ();
+    let xr_entry = openxr::Entry::linked(&platform_info).unwrap();
+    let xr_instance = create_openxr_instance(platform_info, &xr_entry)?;
     let _debug_utils = indite::DebugUtils::new(&xr_entry, &xr_instance);
 
     // Request a form factor from the device (HMD, Handheld, etc.)
@@ -79,7 +80,10 @@ pub fn main() -> Result<(), Error> {
     Ok(())
 }
 
-fn create_openxr_instance(xr_entry: &openxr::Entry) -> Result<openxr::Instance, Error> {
+fn create_openxr_instance(
+    platform_info: (),
+    xr_entry: &openxr::Entry,
+) -> Result<openxr::Instance, Error> {
     // OpenXR will fail to initialize if we ask for an extension that OpenXR can't provide! So we
     // need to check all our extensions before initializing OpenXR with them. Note that even if the
     // extension is present, it's still possible you may not be able to use it. For example: the
@@ -113,6 +117,7 @@ fn create_openxr_instance(xr_entry: &openxr::Entry) -> Result<openxr::Instance, 
             },
             &enabled_extensions,
             &[core_validation_layer_name],
+            &platform_info,
         )
         .unwrap();
     let instance_props = xr_instance.properties().unwrap();

@@ -41,7 +41,7 @@ fn openxr_projection_to_glam(view: &openxr::View) -> Mat4 {
     let down = convert_angle(view.fov.angle_down, z_near);
     let up = convert_angle(view.fov.angle_up, z_near);
 
-    Mat4::frustum_rh(left, right, down, up, z_near, z_far)
+    glam::camera::rh::proj::directx::frustum(left, right, down, up, z_near, z_far)
 }
 
 fn convert_angle(v: f32, z_near: f32) -> f32 {

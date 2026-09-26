@@ -100,7 +100,7 @@ fn create_render_pipeline(
 
     let pipeline_layout = wgpu_device.create_pipeline_layout(&PipelineLayoutDescriptor {
         label: None,
-        bind_group_layouts: &[uniform_layout],
+        bind_group_layouts: &[Some(uniform_layout)],
         immediate_size: 0,
     });
 
@@ -268,7 +268,10 @@ fn write_uniform_buffer(buffer: &Buffer, xr_views: &[openxr::View]) {
     let contents = bytemuck::bytes_of(&transforms);
     let size = contents.len();
 
-    buffer.slice(..).get_mapped_range_mut()[..size].copy_from_slice(contents);
+    {
+        let mut range = buffer.get_mapped_range_mut(..size as u64).unwrap();
+        range.copy_from_slice(contents);
+    }
     buffer.unmap();
 }
 

@@ -150,5 +150,12 @@ unsafe fn create_swapchain_texture(
         usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::COPY_DST,
         view_formats: &[],
     };
-    unsafe { device.create_texture_from_hal::<Vulkan>(wgpu_hal_texture, &texture_desc) }
+
+    // Since the original swapchain contents can be discarded, we can pass uninitialized.
+    // See safety comment in `create_texture_from_hal` for details.
+    let initial_state = TextureUses::UNINITIALIZED;
+
+    unsafe {
+        device.create_texture_from_hal::<Vulkan>(wgpu_hal_texture, &texture_desc, initial_state)
+    }
 }

@@ -114,7 +114,7 @@ unsafe fn create_swapchain_texture(
         sample_count: 1,
         dimension: TextureDimension::D2,
         format: TextureFormat::Rgba8UnormSrgb,
-        usage: TextureUses::COLOR_TARGET | TextureUses::COPY_DST,
+        usage: TextureUses::COLOR_TARGET,
         memory_flags: wgpu::hal::MemoryFlags::empty(),
         view_formats: Vec::new(),
     };
@@ -147,7 +147,8 @@ unsafe fn create_swapchain_texture(
         sample_count: 1,
         dimension: TextureDimension::D2,
         format: TextureFormat::Rgba8UnormSrgb,
-        usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::COPY_DST,
+        // Must only contain usages the OpenXR swapchain was created with, see `create_swapchain`.
+        usage: TextureUsages::RENDER_ATTACHMENT,
         view_formats: &[],
     };
 
